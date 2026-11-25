@@ -1,0 +1,6 @@
+#!/bin/sh
+# Starts tode with the terminal's title set to $1 (the button's name), so pane headers that show
+# the title show that name. The rest of the arguments go to tode.
+printf '\033]2;%s\007' "$1"
+shift
+exec tode "$@"

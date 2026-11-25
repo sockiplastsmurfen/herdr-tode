@@ -3,10 +3,10 @@
 const waiting = [];
 export const state = {
   shared: {}, focused: null, props: {}, layout: { id: "root", children: [{ id: "tode", size: { px: 120 } }] },
-  zoom: 1, ran: [], overlays: [], closed: [], notes: [], spaces: [], hc: [], execs: [],
+  zoom: 1, ran: [], overlays: [], closed: [], notes: [], spaces: [], hc: [], execs: [], panes: [],
   hcAnswer: { stdout: '{"address":"t9","state":"live"}', stderr: "" }, which: "/home/me/.local/bin/tode\n",
 };
-export const reset = (over = {}) => (waiting.length = 0, Object.assign(state, { shared: {}, focused: null, props: {}, ran: [], overlays: [], closed: [], notes: [], spaces: [], hc: [], execs: [], zoom: 1,
+export const reset = (over = {}) => (waiting.length = 0, Object.assign(state, { shared: {}, focused: null, props: {}, ran: [], overlays: [], closed: [], notes: [], spaces: [], hc: [], execs: [], panes: [], zoom: 1,
   hcAnswer: { stdout: '{"address":"t9","state":"live"}', stderr: "" }, which: "/home/me/.local/bin/tode\n" }, over));
 
 export const theme = () => new Proxy({}, { get: (_o, k) => `#${String(k)}` });
@@ -17,7 +17,13 @@ export const props = () => state.props;
 export const layout = () => state.layout;
 export const settings = () => ({ zoom: state.zoom });
 export const checking = () => false;
-export const run = (name, args) => { state.ran.push({ name, args }); return null; };
+// terminal.open makes a pane, as Herdr does.
+export const run = (name, args) => {
+  state.ran.push({ name, args });
+  if (name === "terminal.open") state.panes.push({ pane: `p${state.panes.length + 100}`, terminal: `t${state.panes.length + 100}` });
+  return null;
+};
+export const panes = () => state.panes;
 export const openOverlay = (spec) => { state.overlays.push(spec); return `o${state.overlays.length}`; };
 export const closeOverlay = (id) => { state.closed.push(id); return null; };
 export const spaces = () => state.spaces;
@@ -26,3 +32,4 @@ export const exec = async (cmd, args, opts) => { state.execs.push({ cmd, args, o
 export const hc = async (args) => { state.hc.push(args); return state.hcAnswer; };
 export const nextCommand = () => new Promise((r) => waiting.push(r));
 export const command = (name) => waiting.shift()?.(name);
+export const appHome = () => "/home/me/.config/herdr-app";

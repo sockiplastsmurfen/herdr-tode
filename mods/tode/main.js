@@ -3,9 +3,9 @@
 // (the button's name and where tode opens). Opened as an overlay (that right-click, or
 // `mod.open tode`), the same mod is that settings form; with props {titlebar} it is the
 // popup window's title bar.
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { run, nextCommand, focused, theme, shared, setShared, props, layout, settings, spaces, openOverlay, closeOverlay, notify, checking, exec, hc } from "herdr";
+import { run, nextCommand, focused, panes, theme, shared, setShared, props, layout, settings, spaces, openOverlay, closeOverlay, notify, checking, exec, hc, appHome } from "herdr";
 
 export const DEFAULT_LABEL = "VSCode";
 export const LABEL_KEY = "tode.label";
@@ -43,12 +43,24 @@ export function saveMode(id) {
 }
 
 /** terminal.open's arguments for a tab or a pane, in the focused terminal's folder. A pane opens
- *  to the right of the focused one; with no pane focused (a layout terminal block) it is a tab. */
+ *  to the right of the focused one; with no pane focused (a layout terminal block) it is a tab.
+ *  A tab is named after the button (`name` names only a tab; panes are renamed once they exist). */
 export function openArgs(how = "tab", f = focused()) {
-  const args = { argv: COMMAND, place: how === "pane" && f?.pane ? "right" : "tab" };
+  const place = how === "pane" && f?.pane ? "right" : "tab";
+  // The script is on this computer; on another machine tode starts as it is.
+  const remote = spaces().find((s) => s.id === f?.space)?.machine;
+  const argv = remote ? COMMAND : [`${appHome()}/${TITLE_SCRIPT}`, label()];
+  const args = { argv, place };
   if (f?.cwd) args.folder = f.cwd;
+  if (place === "tab") args.name = label();
   return args;
 }
+
+// Pane headers that show the terminal's title rather than the pane's name (herdr-nvim-header)
+// would show the terminal's address: tode sets no title. So tode starts through `tode-title` in
+// this folder, which sets the title to the button's name and becomes tode. Herdr names the
+// program after what started it, so programs.json matches "tode-title" for the icon.
+export const TITLE_SCRIPT = "mods/tode/tode-title";
 
 // tode asks the terminal whether it shows graphics, and how big it is, as it starts; a terminal
 // started with `hc run` has nobody to answer and a made-up size until the window shows it. So the
@@ -134,7 +146,20 @@ export default class Tode extends View {
   }
 
   open(cx, how = mode()) {
-    if (how !== "window") { run("terminal.open", openArgs(how)); return; }
+    if (how !== "window") {
+      // The new pane is named after the button too: it is the one that wasn't there before.
+      const before = new Set(panes().map((p) => p.pane));
+      const name = label();
+      run("terminal.open", openArgs(how));
+      cx.spawn(async (cx) => {
+        for (let i = 0; i < 30; i++) {
+          const pane = panes().find((p) => !before.has(p.pane) && p.terminal);
+          if (pane) { run("pane.rename", { pane: pane.pane, name }); return; }
+          await new Promise((r) => cx.timer.after(100, () => r()));
+        }
+      });
+      return;
+    }
     const f = focused();
     cx.spawn(async () => {
       try {
@@ -191,8 +216,8 @@ export default class Tode extends View {
     const folder = String(p.folder ?? "").replace(/^\/(Users|home)\/[^/]+/, "~");
     return h_flex().id("tode-titlebar").size_full().px(10).gap(8).items_center()
       .bg(t.chrome).border_b(1).border_color(t.border).text_color(t.muted).text_size(12)
-      .child(svg("mods/tode/icon.svg").size(14))
-      .child(div().font_medium().text_color(t.foreground).child("tode"))
+      .child(image("mods/tode/icon-color.svg").size(14))
+      .child(div().font_medium().text_color(t.foreground).child(label()))
       .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(folder))
       .child(div().id("tode-close").size(22).flex_none().flex().items_center().justify_center().rounded(6)
         .cursor_pointer().hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip("Close tode")

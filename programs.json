@@ -1,0 +1,13 @@
+{
+  "programs": {
+    "tode": {
+      "name": "tode",
+      "icon": "mods/tode/icon-color.svg",
+      "tint": false,
+      "match": [
+        "tode-title",
+        "Electron Helper"
+      ]
+    }
+  }
+}

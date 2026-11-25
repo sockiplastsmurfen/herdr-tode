@@ -20,22 +20,39 @@ test("a saved name is shown instead, and an empty one goes back to VSCode", () =
   assert.equal(label(), "VSCode");
 });
 
+const argv = (name) => ["/home/me/.config/herdr-app/mods/tode/tode-title", name];
+
 test("by default a click opens tode in a new tab, in the focused terminal's folder", () => {
   reset({ focused: { pane: "p1", terminal: "t1", cwd: "/work/site" } });
   assert.equal(mode(), "tab");
   click(make().render(), "tode-open");
-  assert.deepEqual(state.ran, [{ name: "terminal.open", args: { argv: ["tode"], place: "tab", folder: "/work/site" } }]);
+  assert.deepEqual(state.ran[0], { name: "terminal.open", args: { argv: argv("VSCode"), place: "tab", folder: "/work/site", name: "VSCode" } });
+});
+
+test("the new tab or pane is named after the button", async () => {
+  reset({ focused: { pane: "p1", terminal: "t1", cwd: "/w" }, shared: { "tode.label": "Kod" }, panes: [{ pane: "p1", terminal: "t1" }] });
+  click(make().render(), "tode-open");
+  await settle();
+  assert.equal(state.ran[0].args.name, "Kod");
+  assert.deepEqual(state.ran[0].args.argv, argv("Kod"));
+  assert.deepEqual(state.ran[1], { name: "pane.rename", args: { pane: "p101", name: "Kod" } });
+
+  reset({ focused: { pane: "p1", terminal: "t1", cwd: "/w" }, shared: { "tode.label": "Kod", "tode.open": "pane" }, panes: [{ pane: "p1", terminal: "t1" }] });
+  click(make().render(), "tode-open");
+  await settle();
+  assert.equal(state.ran[0].args.name, undefined);
+  assert.deepEqual(state.ran[1], { name: "pane.rename", args: { pane: "p101", name: "Kod" } });
 });
 
 test("set to a new pane, a click opens tode to the right of the focused pane", () => {
   reset({ focused: { pane: "p1", terminal: "t1", cwd: "/work/site" }, shared: { "tode.open": "pane" } });
   click(make().render(), "tode-open");
-  assert.deepEqual(state.ran, [{ name: "terminal.open", args: { argv: ["tode"], place: "right", folder: "/work/site" } }]);
+  assert.deepEqual(state.ran[0], { name: "terminal.open", args: { argv: argv("VSCode"), place: "right", folder: "/work/site" } });
 });
 
 test("a pane falls back to a tab without a focused pane, and no folder is sent without one", () => {
-  assert.deepEqual(openArgs("pane", { pane: null, terminal: "t1", cwd: null }), { argv: ["tode"], place: "tab" });
-  assert.deepEqual(openArgs("tab", null), { argv: ["tode"], place: "tab" });
+  assert.deepEqual(openArgs("pane", { pane: null, terminal: "t1", cwd: null }), { argv: argv("VSCode"), place: "tab", name: "VSCode" });
+  assert.deepEqual(openArgs("tab", null), { argv: argv("VSCode"), place: "tab", name: "VSCode" });
 });
 
 test("set to a popup window, a click starts tode with hc and shows it in a window with a title bar", async () => {
@@ -71,10 +88,11 @@ test("when hc can't start tode, a notification says why and no window opens", as
   assert.match(state.notes[0].body, /no such folder/);
 });
 
-test("the popup's title bar shows the folder and its × ends tode, which closes the window", () => {
-  reset({ props: { titlebar: true, terminal: "t9", folder: "/Users/me/site", overlay: "w1" } });
+test("the popup's title bar shows the button's name and the folder, and its × ends tode", () => {
+  reset({ props: { titlebar: true, terminal: "t9", folder: "/Users/me/site", overlay: "w1" }, shared: { "tode.label": "Kod" } });
   const bar = make().render();
   assert.ok(texts(bar).includes("~/site"));
+  assert.ok(texts(bar).includes("Kod"));
   assert.equal(find(bar, "tode-form"), null);
   click(bar, "tode-close");
   assert.deepEqual(state.ran, [{ name: "terminal.kill", args: { terminal: "t9" } }]);
@@ -156,6 +174,25 @@ test("key commands open tode as set, or in the way they name", async () => {
   await settle();
   command("open-window");
   await settle();
-  assert.deepEqual(state.ran.slice(0, 2).map((r) => r.args.place), ["right", "tab"]);
+  assert.deepEqual(state.ran.filter((r) => r.name === "terminal.open").map((r) => r.args.place), ["right", "tab"]);
   assert.equal(state.overlays[0].kind, "window");
+});
+
+test("on another machine tode starts without the title script, which is on this one", () => {
+  reset({ spaces: [{ id: "s2", machine: "vps" }] });
+  assert.deepEqual(openArgs("tab", { space: "s2", pane: "p1", cwd: "/srv" }).argv, ["tode"]);
+});
+
+test("tode-title sets the terminal's title to its first argument and runs tode with the rest", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const { mkdtempSync, writeFileSync, chmodSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { fileURLToPath } = await import("node:url");
+  // A stand-in tode that prints its arguments.
+  const bin = mkdtempSync(`${tmpdir()}/tode-test-`);
+  writeFileSync(`${bin}/tode`, '#!/bin/sh\necho "tode $*"\n');
+  chmodSync(`${bin}/tode`, 0o755);
+  const script = fileURLToPath(new URL("../mods/tode/tode-title", import.meta.url));
+  const r = spawnSync(script, ["Min kod", "--x"], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+  assert.equal(r.stdout, "\x1b]2;Min kod\x07tode --x\n");
 });

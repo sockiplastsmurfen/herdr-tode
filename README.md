@@ -17,6 +17,10 @@ default), a new pane beside it, or a popup window.
     closes when `tode` ends. The terminal is outside Herdr's tabs and is removed when it ends.
 
   Closing `tode` closes its tab, pane or window.
+- **Named after the button**, with the blue icon: a new tab and its pane are called what the
+  button says (`VSCode`), and so is a new pane; the popup's title bar says it too. The icon in
+  front is the blue version of the button's icon (`icon-color.svg`), from the `tode` entry in
+  `programs.json` (see Install). Tabs and panes are named once, when they open.
 - **Right-click the button** for its settings: a small form opens at the pointer (the
   button's tooltip says so) with the button's **name** and where tode **opens** (New tab, New
   pane, Popup window). **Save** (or Enter) keeps them, **Cancel** (or Esc) doesn't; an empty
@@ -55,6 +59,18 @@ cp -R mods/tode ~/.config/herdr-app/mods/tode
 herdr-app check ~/.config/herdr-app/mods/tode
 ```
 
+For the blue icon in tabs and pane headers, add the `tode` entry from this repo's
+[programs.json](programs.json) to `~/.config/herdr-app/programs.json` (merge it if you have one):
+
+```json
+{ "programs": { "tode": { "name": "tode", "icon": "mods/tode/icon-color.svg", "tint": false,
+                          "match": ["tode-title", "Electron Helper"] } } }
+```
+
+Herdr names a terminal's program after what runs in it (tode is an `Electron Helper` process),
+else after what started it (`tode-title`). The match on `Electron Helper` also gives other
+Electron programs run straight in a terminal this icon.
+
 Then put it in your layout, to the right of the tab bar. In a layout like Herdr's `main`, turn
 the `tabs` block into a row with it (Herdr's shipped layouts are read-only: clone one first with
 `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`):
@@ -69,7 +85,8 @@ the `tabs` block into a row with it (Herdr's shipped layouts are read-only: clon
 `props.block` is the block's own id: the mod resizes that block to fit the button. Leave it out
 to keep a fixed width.
 
-The mod runs `tode`: through Herdr's `terminal.open` for a tab or pane, and with `hc run` (behind
+The mod runs `tode`: through Herdr's `terminal.open` for a tab or pane (behind `tode-title`, a
+two-line `sh` script in the mod that sets the terminal's title to the button's name), and with `hc run` (behind
 `/bin/sh`, which waits for the window to show it) for the popup, after `/bin/sh -c "command -v
 tode"` finds it. It doesn't reach the network or read files.
 
