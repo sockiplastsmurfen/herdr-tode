@@ -4,7 +4,7 @@ A [Herdr](https://herdr.dev) mod: a button in the tab bar that opens
 [`tode`](#requirements) (terminal code) in the focused terminal's folder: in a new tab (the
 default), a new pane beside it, or a popup window.
 
-![The button in the tab bar](preview.png)
+![tode in a tab named after the button, and the button at the right of the tab bar](preview.png)
 
 - **The button** says **VSCode** by default, with a small icon in the style of VS Code's
   (drawn for this mod; it is not Microsoft's logo file). Like the tab bar's other icons it has
