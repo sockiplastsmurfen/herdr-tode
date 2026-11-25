@@ -101,7 +101,25 @@ function find(node, id) {
 
 const stop = (_e, cx) => cx.stop_propagation();
 const isBar = () => Boolean(props()?.titlebar);
-const isForm = () => !isBar() && Boolean(props()?.settings || props()?.overlay);
+const isMissing = () => Boolean(props()?.missing);
+const isForm = () => !isBar() && !isMissing() && Boolean(props()?.settings || props()?.overlay);
+
+// tode comes from terminal-code (VS Code in the terminal), installed with its own script.
+export const TERMINAL_CODE = "https://github.com/zenbu-labs/terminal-code";
+export const INSTALL = "curl -fsSL https://tode.sh/install | bash";
+const MISSING = { width: 460, height: 268 };
+
+/** tode's full path on that machine (null: this one), or null when it isn't installed.
+ *  Rejects when the machine can't be asked. */
+export async function findTode(machine) {
+  const r = await exec("/bin/sh", ["-c", "command -v tode"], { on: machine });
+  return r.stdout?.trim().split("\n")[0] || null;
+}
+
+/** The dialog that says tode isn't installed and how to install it. */
+export function openMissing(machine) {
+  openOverlay({ mod: "tode", props: { missing: true, machine }, kind: "dialog", width: MISSING.width, height: MISSING.height });
+}
 
 /** Key commands ("tode.open" in keys.json, or `herdr-app do tode.open`): open as set, or as named. */
 export const COMMANDS = { "open": null, "open-tab": "tab", "open-pane": "pane", "open-window": "window" };
@@ -109,6 +127,7 @@ export const COMMANDS = { "open": null, "open-tab": "tab", "open-pane": "pane", 
 export default class Tode extends View {
   init(_props, cx) {
     if (isForm()) this.initSettings(cx);
+    else if (isMissing()) this.handle = cx.focus_handle();
     else if (!isBar()) cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
@@ -146,28 +165,26 @@ export default class Tode extends View {
   }
 
   open(cx, how = mode()) {
-    if (how !== "window") {
-      // The new pane is named after the button too: it is the one that wasn't there before.
-      const before = new Set(panes().map((p) => p.pane));
-      const name = label();
-      run("terminal.open", openArgs(how));
-      cx.spawn(async (cx) => {
-        for (let i = 0; i < 30; i++) {
-          const pane = panes().find((p) => !before.has(p.pane) && p.terminal);
-          if (pane) { run("pane.rename", { pane: pane.pane, name }); return; }
-          await new Promise((r) => cx.timer.after(100, () => r()));
-        }
-      });
-      return;
-    }
     const f = focused();
-    cx.spawn(async () => {
+    const machine = spaces().find((s) => s.id === f?.space)?.machine ?? null;
+    cx.spawn(async (cx) => {
       try {
-        // The program's full path, as the person's shell finds it (~/.local/bin is often only
-        // on the login shell's PATH, which exec has and herdr-core may not).
-        const machine = spaces().find((s) => s.id === f?.space)?.machine ?? null;
-        const found = await exec("/bin/sh", ["-c", "command -v tode"], { on: machine }).catch(() => null);
-        const program = found?.stdout?.trim().split("\n")[0] || COMMAND[0];
+        // tode's full path, as the person's shell finds it (~/.local/bin is often only on the
+        // login shell's PATH, which exec has and herdr-core may not). Not there: how to install it.
+        const program = await findTode(machine);
+        if (!program) { openMissing(machine); return; }
+        if (how !== "window") {
+          // The new pane is named after the button too: it is the one that wasn't there before.
+          const before = new Set(panes().map((p) => p.pane));
+          const name = label();
+          run("terminal.open", openArgs(how, f));
+          for (let i = 0; i < 30; i++) {
+            const pane = panes().find((p) => !before.has(p.pane) && p.terminal);
+            if (pane) { run("pane.rename", { pane: pane.pane, name }); return; }
+            await new Promise((r) => cx.timer.after(100, () => r()));
+          }
+          return;
+        }
         const r = await hc(hcArgs(program, f));
         const address = JSON.parse(r.stdout || "{}").address;
         if (!address) throw new Error((r.stderr || r.stdout || "no terminal").trim());
@@ -192,7 +209,7 @@ export default class Tode extends View {
   }
 
   render() {
-    return isBar() ? this.renderTitlebar() : isForm() ? this.renderSettings() : this.renderBar();
+    return isBar() ? this.renderTitlebar() : isMissing() ? this.renderMissing() : isForm() ? this.renderSettings() : this.renderBar();
   }
 
   renderBar() {
@@ -208,6 +225,55 @@ export default class Tode extends View {
       .child(h_flex().id("tode-content").flex_none().h_full().pr(10).items_center()
         .on_size_change((size) => this.fit(size.width))
         .child(button));
+  }
+
+  // The dialog for when tode isn't installed.
+  install() {
+    const p = props();
+    closeOverlay(p.overlay);
+    // In a tab of the focused space, so on its machine; the shell stays open to show how it went.
+    run("terminal.open", { argv: ["/bin/sh", "-c", INSTALL], place: "tab", name: "Install terminal-code" });
+  }
+
+  copy(cx) {
+    const put = 'printf %s "$1" | pbcopy 2>/dev/null || printf %s "$1" | wl-copy 2>/dev/null || printf %s "$1" | xclip -selection clipboard';
+    cx.spawn(async (cx) => {
+      const r = await exec("/bin/sh", ["-c", put, "sh", INSTALL]).catch(() => null);
+      this.copied = r?.code === 0 ? "Copied" : "Couldn't copy";
+      cx.notify();
+    });
+  }
+
+  renderMissing() {
+    const t = theme();
+    const p = props() ?? {};
+    const btn = (id, text, primary, action) => h_flex().id(id).h(30).px(12).items_center().rounded(7)
+      .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
+      .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
+      .hover(s => s.opacity(0.88)).on_click(action).child(text);
+    const para = (text) => div().pt(10).text_size(12.5).text_color(t.muted).child(text);
+    const where = p.machine ? ` on ${p.machine}` : "";
+    return v_flex().id("tode-missing").track_focus(this.handle)
+      .on_key_down((e, cx) => { if (e.key === "escape") { closeOverlay(p.overlay); cx.stop_propagation(); } })
+      .size_full().p(18).bg(t.popover).text_color(t.foreground)
+      .child(h_flex().items_center().gap(8)
+        .child(image("mods/tode/icon-color.svg").size(18))
+        .child(div().flex_1().text_size(15).font_semibold().child(`terminal-code isn't installed${where}`))
+        .child(div().text_size(11).text_color(t.dim).child("Esc")))
+      .child(para(`The ${label()} button runs tode, from terminal-code: VS Code inside your terminal. Install it once (macOS and Linux) with:`))
+      .child(h_flex().mt(10).h(36).px(10).gap(8).items_center().rounded(8).border_1().border_color(t.input).bg(t.background)
+        .child(div().flex_1().min_w(0).truncate().text_size(12.5).font_family(settings()?.font_family ?? "JetBrains Mono").child(INSTALL))
+        .child(div().id("tode-copy").flex_none().text_size(11.5).text_color(t.dim).cursor_pointer()
+          .hover(s => s.text_color(t.foreground)).on_click((_e, cx) => this.copy(cx)).child(this.copied ?? "Copy")))
+      .child(para("Install in a new tab runs it for you; the tab stays open to show how it went. Then click the button again."))
+      .child(div().flex_1())
+      .child(h_flex().pt(14).gap(8).items_center()
+        .child(div().id("tode-github").text_size(12).text_color(t.accent).cursor_pointer().hover(s => s.opacity(0.8))
+          .on_click(() => exec("/bin/sh", ["-c", 'open "$1" 2>/dev/null || xdg-open "$1"', "sh", TERMINAL_CODE]).catch(() => null))
+          .child("terminal-code on GitHub"))
+        .child(div().flex_1())
+        .child(btn("tode-missing-close", "Close", false, () => closeOverlay(p.overlay)))
+        .child(btn("tode-install", "Install in a new tab", true, () => this.install())));
   }
 
   renderTitlebar() {

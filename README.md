@@ -39,10 +39,24 @@ default), a new pane beside it, or a popup window.
 
 ## Requirements
 
-`tode` on your `PATH` as your login shell sees it (for example `~/.local/bin/tode`). Herdr starts
+[terminal-code](https://github.com/zenbu-labs/terminal-code) (VS Code inside your terminal),
+which gives you `tode`. Install it with
+
+```sh
+curl -fsSL https://tode.sh/install | bash
+```
+
+If it isn't installed when you click the button, the mod says so instead of opening anything,
+with that command, **Copy**, **Install in a new tab** (runs it in a tab of the focused space,
+which stays open to show how it went) and a link to terminal-code on GitHub. It checks on the
+focused space's machine, each click.
+
+![When terminal-code isn't installed](screenshots/install.png)
+
+It needs `tode` on your `PATH` as your login shell sees it (for example `~/.local/bin/tode`). Herdr starts
 a tab or pane's command in your interactive shell, so it finds what your shell finds; for the
-popup the mod looks up its full path first. If `tode` is missing, Herdr shows a toast with the
-exit code (tab, pane) or the mod does (popup).
+popup the mod looks up its full path first. If the machine can't be asked, a
+notification says so.
 
 ## Install
 
@@ -88,7 +102,9 @@ to keep a fixed width.
 The mod runs `tode`: through Herdr's `terminal.open` for a tab or pane (behind `tode-title`, a
 two-line `sh` script in the mod that sets the terminal's title to the button's name), and with `hc run` (behind
 `/bin/sh`, which waits for the window to show it) for the popup, after `/bin/sh -c "command -v
-tode"` finds it. It doesn't reach the network or read files.
+tode"` finds it (each click). Only when tode is missing, and you click them, it runs the install
+command (which downloads from tode.sh), `pbcopy` (or `wl-copy`, `xclip`) and `open` (or
+`xdg-open`) for the GitHub link. It doesn't read files.
 
 [RECIPE.md](RECIPE.md) describes the mod for an agent that builds it from scratch.
 

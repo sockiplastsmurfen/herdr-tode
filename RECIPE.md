@@ -33,7 +33,9 @@ its settings: the name and where tode opens.
 
 ## How it behaves
 
-- Click the button, by `shared("tode.open")` (`"tab"` default, `"pane"`, `"window"`):
+- Click the button: first `exec("/bin/sh", ["-c", "command -v tode"], {on: machine})` (the
+  focused space's machine) for tode's path. Empty: open the install dialog (below) and nothing
+  else. Rejected (machine unreachable): `notify` level error. Then, by `shared("tode.open")` (`"tab"` default, `"pane"`, `"window"`):
   - tab: `terminal.open {argv: [appHome() + "/mods/tode/tode-title", label], place: "tab",
     folder: focused().cwd, name: label}` (`name` names the tab).
   - pane: the same with `place: "right"` and no `name`; with no focused pane
@@ -42,14 +44,24 @@ its settings: the name and where tode opens.
     (looked for every 100 ms, up to 3 s). On another machine (the focused space's `machine`)
     argv is just `["tode"]`: the script is on this computer.
   - `tode-title` (executable): `printf '\033]2;%s\007' "$1"; shift; exec tode "$@"`.
-  - window: `exec("/bin/sh", ["-c", "command -v tode"], {on: machine})` for the full path
-    (`machine`: the focused space's), then `hc(["run", "--json", "--bg", "--rm", "--no-parent",
+  - window: with that path, `hc(["run", "--json", "--bg", "--rm", "--no-parent",
     "--on", machine?, "--cwd", cwd?, "--", "/bin/sh", "-c", WAIT, "tode", path])`, then
     `openOverlay({kind: "window", key: "tode-<address>", width: 0.72, height: 0.78, layout:
     column[block 32px {mod: "tode", props: {titlebar: true, terminal, folder}}, block {terminal}]})`.
     × runs `terminal.kill`; the window closes when the terminal ends; the title bar's `close()`
     kills the terminal too (app quit, layout switch). Errors: `notify` level error.
   - Without a cwd, no folder in any of them.
+- The install dialog: `openOverlay({mod: "tode", props: {missing: true, machine}, kind:
+  "dialog", width: 460, height: 268})`. 18px padding, `popover`. Header: the blue icon (18px),
+  "terminal-code isn't installed" (+ " on <machine>"), 15px semibold, "Esc" (`dim`). Text (12.5px
+  `muted`): "The <button name> button runs tode, from terminal-code: VS Code inside your terminal.
+  Install it once (macOS and Linux) with:". A 36px box (`background`, border `input`, radius 8)
+  with `curl -fsSL https://tode.sh/install | bash` in the terminal font and "Copy" (`dim`;
+  "Copied" after). "Install in a new tab runs it for you; the tab stays open to show how it went.
+  Then click the button again." Bottom: "terminal-code on GitHub" (`accent`, opens
+  https://github.com/zenbu-labs/terminal-code), Close, and Install in a new tab (primary):
+  `terminal.open {argv: ["/bin/sh", "-c", INSTALL], place: "tab", name: "Install terminal-code"}`.
+  Copy: `printf %s "$1" | pbcopy || wl-copy || xclip -selection clipboard`. Esc closes.
 - Right-click the button (`on_mouse_down("right")`, propagation stopped): `openOverlay({mod: "tode", props: {settings: true}, kind: "popup",
   at: "pointer", width: 340, height: 264})`. `mod.open tode` opens the same form (mod.json's
   `overlay`): the mod draws the form whenever `props().settings` or `props().overlay` is set.
@@ -68,7 +80,8 @@ its settings: the name and where tode opens.
 
 ## Built from
 
-- `mods/tode/`: `main.js` (one View: title bar with `props.titlebar`, form with
+- `mods/tode/`: `main.js` (one View: title bar with `props.titlebar`, install dialog with
+  `props.missing`, form with
   `props.settings` or `props.overlay`, else the bar), `tode-title` (the title script),
   `icon-color.svg` (the blue icon: the same shapes as `icon.svg` in `#0a6fbf` lower band,
   `#0b5c9e` bar, `#2ea6f3` upper band), `mod.json`
@@ -116,6 +129,8 @@ its settings: the name and where tode opens.
 - The tab bar shows the icon and "VSCode" at its right end, in the same colors as its other buttons.
 - New tabs and panes are named after the button, with the blue icon in the tab and the pane
   header, in Herdr's own `pane` header and in ones that show the title.
+- Without tode on the PATH, clicking the button opens the install dialog and nothing else;
+  Install in a new tab installs terminal-code in a tab.
 - Clicking the button opens `tode` in the focused terminal's folder in a new tab; set to New
   pane, in a pane to the right; set to Popup window, in a window with the title bar, and × or
   quitting tode closes it.

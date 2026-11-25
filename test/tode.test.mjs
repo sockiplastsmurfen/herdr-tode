@@ -22,10 +22,11 @@ test("a saved name is shown instead, and an empty one goes back to VSCode", () =
 
 const argv = (name) => ["/home/me/.config/herdr-app/mods/tode/tode-title", name];
 
-test("by default a click opens tode in a new tab, in the focused terminal's folder", () => {
+test("by default a click opens tode in a new tab, in the focused terminal's folder", async () => {
   reset({ focused: { pane: "p1", terminal: "t1", cwd: "/work/site" } });
   assert.equal(mode(), "tab");
   click(make().render(), "tode-open");
+  await settle();
   assert.deepEqual(state.ran[0], { name: "terminal.open", args: { argv: argv("VSCode"), place: "tab", folder: "/work/site", name: "VSCode" } });
 });
 
@@ -44,9 +45,10 @@ test("the new tab or pane is named after the button", async () => {
   assert.deepEqual(state.ran[1], { name: "pane.rename", args: { pane: "p101", name: "Kod" } });
 });
 
-test("set to a new pane, a click opens tode to the right of the focused pane", () => {
+test("set to a new pane, a click opens tode to the right of the focused pane", async () => {
   reset({ focused: { pane: "p1", terminal: "t1", cwd: "/work/site" }, shared: { "tode.open": "pane" } });
   click(make().render(), "tode-open");
+  await settle();
   assert.deepEqual(state.ran[0], { name: "terminal.open", args: { argv: argv("VSCode"), place: "right", folder: "/work/site" } });
 });
 
@@ -195,4 +197,49 @@ test("tode-title sets the terminal's title to its first argument and runs tode w
   const script = fileURLToPath(new URL("../mods/tode/tode-title", import.meta.url));
   const r = spawnSync(script, ["Min kod", "--x"], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
   assert.equal(r.stdout, "\x1b]2;Min kod\x07tode --x\n");
+});
+
+test("without tode installed, a click explains how to install terminal-code instead of opening anything", async () => {
+  reset({ focused: { space: "s2", pane: "p1", cwd: "/w" }, spaces: [{ id: "s2", machine: "vps" }], which: "" });
+  click(make().render(), "tode-open");
+  await settle();
+  assert.equal(state.ran.length, 0);
+  assert.deepEqual(state.hc, []);
+  assert.equal(state.overlays.length, 1);
+  assert.equal(state.overlays[0].kind, "dialog");
+  assert.deepEqual(state.overlays[0].props, { missing: true, machine: "vps" });
+  assert.equal(state.execs[0].opts.on, "vps");
+});
+
+test("the install dialog shows the command and runs it in a new tab", () => {
+  reset({ props: { missing: true, machine: null, overlay: "d1" } });
+  const view = make();
+  const drawn = view.render();
+  assert.ok(texts(drawn).includes("curl -fsSL https://tode.sh/install | bash"));
+  assert.ok(texts(drawn).some((t) => t.includes("terminal-code")));
+  assert.equal(find(drawn, "tode-form"), null);
+  click(drawn, "tode-install");
+  assert.deepEqual(state.closed, ["d1"]);
+  assert.deepEqual(state.ran, [{ name: "terminal.open", args: { argv: ["/bin/sh", "-c", "curl -fsSL https://tode.sh/install | bash"], place: "tab", name: "Install terminal-code" } }]);
+});
+
+test("the install dialog copies the command and links to terminal-code on GitHub", async () => {
+  reset({ props: { missing: true, machine: null, overlay: "d1" } });
+  const view = make();
+  click(view.render(), "tode-copy");
+  await settle();
+  assert.deepEqual(state.execs[0].args.slice(-1), ["curl -fsSL https://tode.sh/install | bash"]);
+  assert.ok(texts(view.render()).includes("Copied"));
+  click(view.render(), "tode-github");
+  assert.deepEqual(state.execs[1].args.slice(-1), ["https://github.com/zenbu-labs/terminal-code"]);
+  click(view.render(), "tode-missing-close");
+  assert.deepEqual(state.closed, ["d1"]);
+});
+
+test("when the machine can't be asked, a notification says so", async () => {
+  reset({ focused: { pane: "p1", cwd: "/w" }, execFails: true });
+  click(make().render(), "tode-open");
+  await settle();
+  assert.equal(state.overlays.length, 0);
+  assert.equal(state.notes[0].level, "error");
 });

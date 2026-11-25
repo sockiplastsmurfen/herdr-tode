@@ -6,7 +6,7 @@ export const state = {
   zoom: 1, ran: [], overlays: [], closed: [], notes: [], spaces: [], hc: [], execs: [], panes: [],
   hcAnswer: { stdout: '{"address":"t9","state":"live"}', stderr: "" }, which: "/home/me/.local/bin/tode\n",
 };
-export const reset = (over = {}) => (waiting.length = 0, Object.assign(state, { shared: {}, focused: null, props: {}, ran: [], overlays: [], closed: [], notes: [], spaces: [], hc: [], execs: [], panes: [], zoom: 1,
+export const reset = (over = {}) => (waiting.length = 0, Object.assign(state, { shared: {}, focused: null, props: {}, ran: [], overlays: [], closed: [], notes: [], spaces: [], hc: [], execs: [], panes: [], execFails: false, zoom: 1,
   hcAnswer: { stdout: '{"address":"t9","state":"live"}', stderr: "" }, which: "/home/me/.local/bin/tode\n" }, over));
 
 export const theme = () => new Proxy({}, { get: (_o, k) => `#${String(k)}` });
@@ -28,7 +28,12 @@ export const openOverlay = (spec) => { state.overlays.push(spec); return `o${sta
 export const closeOverlay = (id) => { state.closed.push(id); return null; };
 export const spaces = () => state.spaces;
 export const notify = (n) => { state.notes.push(n); return "n1"; };
-export const exec = async (cmd, args, opts) => { state.execs.push({ cmd, args, opts }); return { stdout: state.which, stderr: "", code: 0 }; };
+export const exec = async (cmd, args, opts) => {
+  state.execs.push({ cmd, args, opts });
+  if (state.execFails) throw new Error("machine unreachable");
+  const lookup = args?.[1] === "command -v tode";
+  return { stdout: lookup ? state.which : "", stderr: "", code: lookup && !state.which ? 1 : 0 };
+};
 export const hc = async (args) => { state.hc.push(args); return state.hcAnswer; };
 export const nextCommand = () => new Promise((r) => waiting.push(r));
 export const command = (name) => waiting.shift()?.(name);
