@@ -6,16 +6,18 @@ terminal's folder.
 
 ![The button in the tab bar](preview.png)
 
-- **The button** says **VSCode** by default, with a small blue icon in the style of VS Code's
-  (drawn for this mod; it is not Microsoft's logo file). Click it: a terminal pane opens to
+- **The button** says **VSCode** by default, with a small icon in the style of VS Code's
+  (drawn for this mod; it is not Microsoft's logo file). Like the tab bar's other icons it has
+  one color, the button's text color; the fold shows as lighter and darker parts. Click it: a terminal pane opens to
   the right of the focused pane, in its folder, running `tode`. Closing `tode` closes the pane.
   If no pane is focused (a terminal shown outside a tab), it opens in a new tab instead.
-- **The gear** beside it opens a small form to name the button. **Save** (or Enter) keeps the
+- **Right-click the button** to name it: a small form opens at the pointer (the button's
+  tooltip says so). **Save** (or Enter) keeps the
   name, **Cancel** (or Esc) doesn't; an empty name goes back to **VSCode**. The name is kept in
   Herdr's shared state (`shared("tode.label")`), so it is still there after a restart, and other
   mods can show it too. `mod.open tode` (or the command palette) opens the same form.
-- **Theme colors** throughout: the bar uses `chrome`, `border`, `muted`, `hover`; the form
-  `popover`, `input`, `accent`, `solid`. Only the icon has its own blue.
+- **Theme colors** throughout, the icon too: the bar uses `chrome`, `border`, `muted`, `hover`,
+  `foreground`; the form `popover`, `input`, `accent`, `solid`.
 - **Its block fits the button**: the mod measures its content and resizes its layout block
   (`layout.resize`) when the name changes.
 

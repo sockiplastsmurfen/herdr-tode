@@ -1,6 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-  <!-- An editor mark drawn for this mod in the style of VS Code's (a folded blue band); not its logo file. -->
-  <path d="M16.6 22 L2.2 9 L4.6 7 L16.6 16.6 Z" fill="#0a6fbf"/>
-  <path d="M16.6 2 L21.8 4.5 V19.5 L16.6 22 Z" fill="#0b5c9e"/>
-  <path d="M16.6 2 V7.4 L4.6 17 L2.2 15 Z" fill="#2ea6f3"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+  <!-- An editor mark drawn for this mod in the style of VS Code's (a folded band), not its logo file.
+       One color, tinted with the text color like the tab bar's other icons; the fold is shown by opacity. -->
+  <path d="M16.6 22 L2.2 9 L4.6 7 L16.6 16.6 Z" opacity="0.55"/>
+  <path d="M16.6 2 L21.8 4.5 V19.5 L16.6 22 Z" opacity="0.8"/>
+  <path d="M16.6 2 V7.4 L4.6 17 L2.2 15 Z"/>
 </svg>

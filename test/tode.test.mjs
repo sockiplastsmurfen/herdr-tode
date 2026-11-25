@@ -31,9 +31,9 @@ test("without a focused pane it opens a tab, and without a folder it leaves the 
   assert.deepEqual(openArgs(null), { argv: ["tode"], place: "tab" });
 });
 
-test("the gear opens the settings popup, which saves the typed name", () => {
+test("a right-click on the button opens the settings popup, which saves the typed name", () => {
   reset();
-  click(make().render(), "tode-settings");
+  find(make().render(), "tode-open").on["on_mouse_down:right"]({}, cx());
   assert.equal(state.overlays.length, 1);
   assert.equal(state.overlays[0].mod, "tode");
   assert.deepEqual(state.overlays[0].props, { settings: true });

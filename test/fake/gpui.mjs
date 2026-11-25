@@ -10,7 +10,7 @@ function el(tag) {
       if (k === "when") return (c, f) => (c ? f(api) : api);
       if (k === "hover") return (f) => { f(api); return api; };
       if (k === "id") return (x) => { e.id = x; return api; };
-      if (typeof k === "string" && k.startsWith("on_")) return (a, b) => { e.on[k] = typeof a === "function" ? a : b; return api; };
+      if (typeof k === "string" && k.startsWith("on_")) return (a, b) => { e.on[typeof a === "string" ? `${k}:${a}` : k] = typeof a === "function" ? a : b; return api; };
       return () => api;
     },
   });

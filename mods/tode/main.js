@@ -1,7 +1,7 @@
 // tode: a button that opens `tode` (terminal code) in a new pane beside the focused terminal,
-// in that terminal's folder. The gear beside it names the button. Opened as an overlay (the
-// gear, or `mod.open tode`), the same mod is that settings form.
-import { View, div, svg, image } from "gpui-kit";
+// in that terminal's folder. A right-click on it names the button. Opened as an overlay (that
+// right-click, or `mod.open tode`), the same mod is that settings form.
+import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { run, focused, theme, shared, setShared, props, layout, settings, openOverlay, closeOverlay, checking } from "herdr";
 
@@ -88,19 +88,17 @@ export default class Tode extends View {
 
   renderBar() {
     const t = theme();
-    const gear = div().id("tode-settings").size(26).flex_none().flex().items_center().justify_center().rounded(6)
-      .text_color(t.dim).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
-      .on_mouse_down("left", stop).on_click(() => this.openSettings())
-      .child(svg("mods/tode/gear.svg").size(14));
     const button = h_flex().id("tode-open").h(26).px(8).gap(5).flex_none().items_center().rounded(6)
       .text_size(12).bg(t.chrome).text_color(t.muted).cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground))
+      .tooltip(`Open tode beside the focused terminal. Right-click to rename.`)
       .on_mouse_down("left", stop).on_click(() => this.open())
-      .child(image("mods/tode/icon.svg").size(14)).child(label());
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.openSettings(); })
+      .child(svg("mods/tode/icon.svg").size(14)).child(label());
     return h_flex().id("tode-root").size_full().items_center().bg(t.chrome).border_b(1).border_color(t.border)
-      .child(h_flex().id("tode-content").flex_none().h_full().pl(3).pr(10).gap(1).items_center()
+      .child(h_flex().id("tode-content").flex_none().h_full().pr(10).items_center()
         .on_size_change((size) => this.fit(size.width))
-        .child(button).child(gear));
+        .child(button));
   }
 
   renderSettings() {
@@ -114,7 +112,7 @@ export default class Tode extends View {
       .on_key_down((e, cx) => { if (e.key === "escape") { closeOverlay(p.overlay); cx.stop_propagation(); } })
       .size_full().p(16).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().gap(8)
-        .child(image("mods/tode/icon.svg").size(16))
+        .child(svg("mods/tode/icon.svg").size(16).text_color(t.muted))
         .child(div().flex_1().text_size(14).font_semibold().child("tode button"))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().pt(14).pb(6).text_size(11.5).text_color(t.dim).child("Button name"))
