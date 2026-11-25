@@ -1,7 +1,12 @@
 // Helpers: make a view as Herdr would, render it, find elements by id and click them.
 import Tode from "../mods/tode/main.js";
 
-export const cx = () => ({ notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {} }), timer: { after() {}, every() {} } });
+/** Tasks the mod spawned; settle() waits for them. */
+export const tasks = [];
+/** Waits until the mod's tasks are done or waiting for something that won't come (its command loop). */
+export const settle = () => new Promise((r) => setTimeout(r, 20));
+export const cx = () => ({ notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {} }), timer: { after() {}, every() {} },
+  spawn(f) { tasks.push(f(cx())); } });
 
 export function make() {
   const v = new Tode();

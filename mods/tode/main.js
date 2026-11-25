@@ -1,14 +1,23 @@
-// tode: a button that opens `tode` (terminal code) in a new pane beside the focused terminal,
-// in that terminal's folder. A right-click on it names the button. Opened as an overlay (that
-// right-click, or `mod.open tode`), the same mod is that settings form.
+// tode: a button that opens `tode` (terminal code) in the focused terminal's folder: in a new
+// tab (default), a new pane beside it, or a popup window. A right-click on it opens the settings
+// (the button's name and where tode opens). Opened as an overlay (that right-click, or
+// `mod.open tode`), the same mod is that settings form; with props {titlebar} it is the
+// popup window's title bar.
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { run, focused, theme, shared, setShared, props, layout, settings, openOverlay, closeOverlay, checking } from "herdr";
+import { run, nextCommand, focused, theme, shared, setShared, props, layout, settings, spaces, openOverlay, closeOverlay, notify, checking, exec, hc } from "herdr";
 
 export const DEFAULT_LABEL = "VSCode";
 export const LABEL_KEY = "tode.label";
+export const MODE_KEY = "tode.open";
 export const COMMAND = ["tode"];
-const FORM = { width: 300, height: 196 };
+/** Where tode opens; the first is the default. */
+export const MODES = [
+  { id: "tab", name: "New tab" },
+  { id: "pane", name: "New pane" },
+  { id: "window", name: "Popup window" },
+];
+const FORM = { width: 340, height: 264 };
 
 /** The button's name: the saved one, else VSCode. */
 export function label() {
@@ -22,12 +31,53 @@ export function saveLabel(text) {
   setShared(LABEL_KEY, name && name !== DEFAULT_LABEL ? name : null);
 }
 
-/** The command that opens tode for what is focused now: a pane to the right in the
- *  focused terminal's folder, or a new tab when no pane is focused (a layout terminal block). */
-export function openArgs(f = focused()) {
-  const args = { argv: COMMAND, place: f?.pane ? "right" : "tab" };
+/** Where tode opens: the saved choice, else a new tab. */
+export function mode() {
+  const saved = shared(MODE_KEY);
+  return MODES.some((m) => m.id === saved) ? saved : MODES[0].id;
+}
+
+/** Saves where tode opens; the default is saved as null. */
+export function saveMode(id) {
+  setShared(MODE_KEY, MODES.some((m) => m.id === id) && id !== MODES[0].id ? id : null);
+}
+
+/** terminal.open's arguments for a tab or a pane, in the focused terminal's folder. A pane opens
+ *  to the right of the focused one; with no pane focused (a layout terminal block) it is a tab. */
+export function openArgs(how = "tab", f = focused()) {
+  const args = { argv: COMMAND, place: how === "pane" && f?.pane ? "right" : "tab" };
   if (f?.cwd) args.folder = f.cwd;
   return args;
+}
+
+// tode asks the terminal whether it shows graphics, and how big it is, as it starts; a terminal
+// started with `hc run` has nobody to answer and a made-up size until the window shows it. So the
+// terminal waits for the window: showing it changes the terminal's size. Then a moment for the
+// size to settle, and tode starts; at the latest after 3 s.
+export const WAIT_FOR_WINDOW = [
+  'p="$1"; was=$(stty size 2>/dev/null); i=0',
+  'while [ $i -lt 60 ] && [ "$(stty size 2>/dev/null)" = "$was" ]; do sleep 0.05; i=$((i+1)); done',
+  'sleep 0.3; exec "$p"',
+].join("; ");
+
+/** hc's arguments for tode in a popup window: a terminal of its own, outside Herdr's tabs,
+ *  removed when it exits, on the focused space's machine. */
+export function hcArgs(program, f = focused()) {
+  const machine = spaces().find((s) => s.id === f?.space)?.machine ?? null;
+  return ["run", "--json", "--bg", "--rm", "--no-parent",
+    ...(machine ? ["--on", machine] : []), ...(f?.cwd ? ["--cwd", f.cwd] : []),
+    "--", "/bin/sh", "-c", WAIT_FOR_WINDOW, "tode", program];
+}
+
+/** The popup window: a title bar (this mod) over the terminal. Closes itself when tode ends. */
+export function windowSpec(address, folder) {
+  return {
+    kind: "window", key: `tode-${address}`, width: 0.72, height: 0.78,
+    layout: { type: "column", children: [
+      { type: "block", size: { px: 32 }, content: { mod: "tode", props: { titlebar: true, terminal: address, folder } } },
+      { type: "block", content: { terminal: address } },
+    ] },
+  };
 }
 
 function find(node, id) {
@@ -38,16 +88,33 @@ function find(node, id) {
 }
 
 const stop = (_e, cx) => cx.stop_propagation();
-const isForm = () => Boolean(props()?.settings || props()?.overlay);
+const isBar = () => Boolean(props()?.titlebar);
+const isForm = () => !isBar() && Boolean(props()?.settings || props()?.overlay);
+
+/** Key commands ("tode.open" in keys.json, or `herdr-app do tode.open`): open as set, or as named. */
+export const COMMANDS = { "open": null, "open-tab": "tab", "open-pane": "pane", "open-window": "window" };
 
 export default class Tode extends View {
   init(_props, cx) {
     if (isForm()) this.initSettings(cx);
+    else if (!isBar()) cx.spawn(async (cx) => {
+      for (;;) {
+        const c = await nextCommand();
+        if (c in COMMANDS) this.open(cx, COMMANDS[c] ?? undefined);
+      }
+    });
+  }
+
+  // The popup window's title bar: closing tode closes the window.
+  async close() {
+    const terminal = isBar() && props()?.terminal;
+    if (terminal && !checking()) run("terminal.kill", { terminal });
   }
 
   // The settings form.
   initSettings(cx) {
     this.text = label();
+    this.choice = mode();
     this.input = InputState.new({ value: this.text });
     this.input.set_selected_range({ start: 0, end: this.text.length });
     this.input.on("change", (_e, cx) => { this.text = this.input.value(); cx.notify(); });
@@ -62,11 +129,28 @@ export default class Tode extends View {
 
   save() {
     saveLabel(this.text);
+    saveMode(this.choice);
     closeOverlay(props().overlay);
   }
 
-  open() {
-    run("terminal.open", openArgs());
+  open(cx, how = mode()) {
+    if (how !== "window") { run("terminal.open", openArgs(how)); return; }
+    const f = focused();
+    cx.spawn(async () => {
+      try {
+        // The program's full path, as the person's shell finds it (~/.local/bin is often only
+        // on the login shell's PATH, which exec has and herdr-core may not).
+        const machine = spaces().find((s) => s.id === f?.space)?.machine ?? null;
+        const found = await exec("/bin/sh", ["-c", "command -v tode"], { on: machine }).catch(() => null);
+        const program = found?.stdout?.trim().split("\n")[0] || COMMAND[0];
+        const r = await hc(hcArgs(program, f));
+        const address = JSON.parse(r.stdout || "{}").address;
+        if (!address) throw new Error((r.stderr || r.stdout || "no terminal").trim());
+        openOverlay(windowSpec(address, f?.cwd ?? null));
+      } catch (e) {
+        notify({ title: "tode didn't start", body: String(e?.message ?? e), level: "error" });
+      }
+    });
   }
 
   openSettings() {
@@ -83,7 +167,7 @@ export default class Tode extends View {
   }
 
   render() {
-    return isForm() ? this.renderSettings() : this.renderBar();
+    return isBar() ? this.renderTitlebar() : isForm() ? this.renderSettings() : this.renderBar();
   }
 
   renderBar() {
@@ -91,14 +175,29 @@ export default class Tode extends View {
     const button = h_flex().id("tode-open").h(26).px(8).gap(5).flex_none().items_center().rounded(6)
       .text_size(12).bg(t.chrome).text_color(t.muted).cursor_pointer()
       .hover(s => s.bg(t.hover).text_color(t.foreground))
-      .tooltip(`Open tode beside the focused terminal. Right-click to rename.`)
-      .on_mouse_down("left", stop).on_click(() => this.open())
+      .tooltip(`Open tode in ${MODES.find((m) => m.id === mode()).name.toLowerCase()}. Right-click for settings.`)
+      .on_mouse_down("left", stop).on_click((_e, cx) => this.open(cx))
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.openSettings(); })
       .child(svg("mods/tode/icon.svg").size(14)).child(label());
     return h_flex().id("tode-root").size_full().items_center().bg(t.chrome).border_b(1).border_color(t.border)
       .child(h_flex().id("tode-content").flex_none().h_full().pr(10).items_center()
         .on_size_change((size) => this.fit(size.width))
         .child(button));
+  }
+
+  renderTitlebar() {
+    const t = theme();
+    const p = props() ?? {};
+    const folder = String(p.folder ?? "").replace(/^\/(Users|home)\/[^/]+/, "~");
+    return h_flex().id("tode-titlebar").size_full().px(10).gap(8).items_center()
+      .bg(t.chrome).border_b(1).border_color(t.border).text_color(t.muted).text_size(12)
+      .child(svg("mods/tode/icon.svg").size(14))
+      .child(div().font_medium().text_color(t.foreground).child("tode"))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(folder))
+      .child(div().id("tode-close").size(22).flex_none().flex().items_center().justify_center().rounded(6)
+        .cursor_pointer().hover(s => s.bg(t.hover).text_color(t.foreground)).tooltip("Close tode")
+        .on_mouse_down("left", stop).on_click(() => run("terminal.kill", { terminal: p.terminal }))
+        .child("×"));
   }
 
   renderSettings() {
@@ -118,7 +217,17 @@ export default class Tode extends View {
       .child(div().pt(14).pb(6).text_size(11.5).text_color(t.dim).child("Button name"))
       .child(Input.new(this.input).h(34).px(10).rounded(8).border_1()
         .border_color(this.inputFocused ? t.accent : t.input).bg(t.background).text_size(12.8).text_color(t.foreground))
-      .child(div().pt(6).text_size(11.5).text_color(t.dim).child(`Empty: ${DEFAULT_LABEL}. Runs tode in a new pane.`))
+      .child(div().pt(6).text_size(11.5).text_color(t.dim).child(`Empty: ${DEFAULT_LABEL}.`))
+      .child(div().pt(14).pb(6).text_size(11.5).text_color(t.dim).child("Open tode in"))
+      .child(h_flex().h(32).p(2).gap(2).rounded(8).border_1().border_color(t.input).bg(t.background)
+        .children(MODES.map((m) => {
+          const on = this.choice === m.id;
+          return h_flex().id(`tode-mode-${m.id}`).flex_1().h_full().items_center().justify_center().rounded(6)
+            .text_size(12).cursor_pointer().bg(on ? t.selected : t.background).text_color(on ? t.foreground : t.muted)
+            .when(on, el => el.font_medium()).hover(s => s.bg(on ? t.selected : t.hover).text_color(t.foreground))
+            .on_click((_e, cx) => { this.choice = m.id; cx.notify(); })
+            .child(m.name);
+        })))
       .child(h_flex().pt(14).gap(8).justify_end()
         .child(btn("tode-cancel", "Cancel", false, () => closeOverlay(p.overlay)))
         .child(btn("tode-save", "Save", true, () => this.save())));
