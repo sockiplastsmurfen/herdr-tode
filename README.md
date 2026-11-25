@@ -1,7 +1,8 @@
 # VS Code for Herdr
 
 A [Herdr](https://herdr.dev) mod that opens VS Code in your terminal, in the folder you are
-working in. It adds a **VSCode** button to the right end of the tab bar. Click it and
+working in. It is a **VSCode** button that you place in your layout, for example at the right
+end of the tab bar. Click it and
 [terminal-code](https://github.com/zenbu-labs/terminal-code) (`tode`, VS Code inside the
 terminal) opens in the focused terminal's folder, in a new tab, a pane beside it or a popup
 window. The new tab or pane is named after the button, with a blue icon.
@@ -46,9 +47,14 @@ cp -R mods/tode ~/.config/herdr-app/mods/tode
 herdr-app check ~/.config/herdr-app/mods/tode
 ```
 
-Then put the button in your layout, to the right of the tab bar. In a layout like Herdr's
-`main`, turn the `tabs` block into a row with it. Herdr's shipped layouts are read-only, so
-clone one first: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`.
+**The button doesn't show until you put it in a layout.** The mod doesn't place itself
+(`mod.json` says `"place": "none"`): Herdr's automatic places are whole panels along an edge of
+the window, not a button in the tab bar. Put a block with `{ "mod": "tode" }` where you want the
+button. An agent adding the mod does this for you; tell it where you want the button.
+
+The suggestion: at the right end of the tab bar. In a layout like Herdr's `main`, turn the
+`tabs` block into a row with the button's block after it. Herdr's shipped layouts are
+read-only, so clone one first: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`.
 
 ```json
 { "id": "tabs-row", "type": "row", "size": { "px": 42 }, "resizable": false, "children": [
@@ -59,6 +65,11 @@ clone one first: `herdr-app do layout.clone '{"name":"main","as":"my-main"}'`.
 
 `props.block` is the block's own id: the mod resizes it to fit the button's name. Leave it out
 for a fixed width.
+
+Anywhere else works the same way: put the block before the tabs, in the status bar's row or in
+the sidebar. The button is drawn to match the tab bar (its background and the line under it),
+so it fits best in or next to it. It can't sit among the tab bar's own buttons (Files, Changes)
+unless your tab-bar mod draws it there: those are drawn by the tab-bar mod itself.
 
 For the blue icon in tabs and pane headers, add the `tode` entry from
 [programs.json](programs.json) to `~/.config/herdr-app/programs.json` (merge it if you have one):

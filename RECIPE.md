@@ -88,7 +88,7 @@ Needs terminal-code (`curl -fsSL https://tode.sh/install | bash`); the mod is na
   `props.settings` or `props.overlay`, else the bar), `tode-title` (the title script),
   `icon-color.svg` (the blue icon: the same shapes as `icon.svg` in `#0a6fbf` lower band,
   `#0b5c9e` bar, `#2ea6f3` upper band), `mod.json`
-  (`place: "none"`, an overlay of 340×264), `icon.svg`.
+  (`place: "none"`: it only shows where a layout puts it; an overlay of 340×264), `icon.svg`.
 - Layout: the tab bar block becomes the first child (weight 1) of a 42px row; the second child
   is `{"id": "tode", "content": {"mod": "tode", "props": {"block": "tode"}}, "window_drag": true}`.
 - The tab bar block keeps its own right padding (10px in Herdr's), so the gap before this button
