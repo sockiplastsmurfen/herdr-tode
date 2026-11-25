@@ -4,8 +4,9 @@ import Tode from "../mods/tode/main.js";
 /** Tasks the mod spawned; settle() waits for them. */
 export const tasks = [];
 /** Waits until the mod's tasks are done or waiting for something that won't come (its command loop). */
-export const settle = () => new Promise((r) => setTimeout(r, 20));
-export const cx = () => ({ notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {} }), timer: { after() {}, every() {} },
+export const settle = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+export const cx = () => ({ notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {} }),
+  timer: { after(ms, f) { setTimeout(() => f(cx()), Math.min(ms, 20)); }, every() {} },
   spawn(f) { tasks.push(f(cx())); } });
 
 export function make() {

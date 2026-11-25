@@ -89,11 +89,16 @@ other Electron programs run straight in a terminal this icon.
   - **New tab** (the default), named after the button.
   - **New pane**, to the right of the focused one, named after the button.
   - **Popup window**: a Herdr window over the layout with a title bar (the icon, the button's
-    name, the folder, × to close). Drag it by the title bar.
+    name, the folder). Drag it by the title bar. Its buttons move VS Code into a **new tab** or a
+    **pane** beside the focused one (it keeps running, named after the button), or close it (×).
 
   Quitting VS Code closes its tab, pane or window.
-- **Right-click VSCode** for the settings: the button's name (empty: VSCode) and where VS Code
-  opens. They are kept across restarts. The command palette's `mod.open tode` opens them too.
+- **Already open?** If VS Code is open in the space for that folder (or a folder above it), a
+  click shows it (its tab or pane, or its popup) instead of starting another one. Set it to
+  **Open another** in the settings to always start a new one. Only VS Codes the button started
+  count.
+- **Right-click VSCode** for the settings: the button's name (empty: VSCode), where VS Code
+  opens, and whether a click shows one that is already open. They are kept across restarts. The command palette's `mod.open tode` opens them too.
 
   ![The settings](screenshots/settings.png)
 - **Keys**: bind `tode.open` (as set), `tode.open-tab`, `tode.open-pane` or `tode.open-window`
@@ -114,8 +119,9 @@ made by or affiliated with Microsoft or zenbu-labs.
 - Only when terminal-code is missing, and you click them: the install command (it downloads from
   tode.sh), `pbcopy` (or `wl-copy`, `xclip`) for Copy, `open` (or `xdg-open`) for the GitHub link.
 
-It keeps the button's name and where VS Code opens in Herdr's shared state (`tode.label`,
-`tode.open`). It reads no files.
+It labels each VS Code terminal it starts (`tode.vscode`, and `tode.space` for a popup) to find
+it again. It keeps the button's name, where VS Code opens and whether to show an open one in
+Herdr's shared state (`tode.label`, `tode.open`, `tode.reuse`). It reads no files.
 
 ## For developers
 

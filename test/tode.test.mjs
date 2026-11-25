@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { state, reset, command } from "./fake/herdr.mjs";
 import { make, find, texts, click, cx, settle } from "./lib.mjs";
-import { label, saveLabel, openArgs, mode, saveMode, WAIT_FOR_WINDOW } from "../mods/tode/main.js";
+import { label, saveLabel, openArgs, mode, saveMode, WAIT_FOR_WINDOW, reuse, saveReuse, findOpen } from "../mods/tode/main.js";
 
 test("the button says VSCode by default", () => {
   reset();
@@ -63,7 +63,8 @@ test("set to a popup window, a click starts tode with hc and shows it in a windo
   click(make().render(), "tode-open");
   await settle();
   assert.deepEqual(state.hc, [["run", "--json", "--bg", "--rm", "--no-parent", "--cwd", "/work/site",
-    "--", "/bin/sh", "-c", WAIT_FOR_WINDOW, "tode", "/home/me/.local/bin/tode"]]);
+    "--label", "tode.vscode=1", "--label", "tode.space=s1",
+    "--", "/bin/sh", "-c", WAIT_FOR_WINDOW, "tode", "/home/me/.local/bin/tode", "VSCode"]]);
   assert.equal(state.overlays.length, 1);
   const w = state.overlays[0];
   assert.equal(w.kind, "window");
@@ -242,4 +243,92 @@ test("when the machine can't be asked, a notification says so", async () => {
   await settle();
   assert.equal(state.overlays.length, 0);
   assert.equal(state.notes[0].level, "error");
+});
+
+test("a new tab or pane's tode is labelled, so a later click can find it", async () => {
+  reset({ focused: { space: "s1", pane: "p1", terminal: "t1", cwd: "/w" }, spaces: [{ id: "s1", machine: null, tabs: [{ id: "tb1" }] }],
+    panes: [{ pane: "p1", terminal: "t1", tab: "tb1" }] });
+  click(make().render(), "tode-open");
+  await settle();
+  assert.deepEqual(state.hc, [["label", "t101", "tode.vscode=1"]]);
+});
+
+const opened = (over = {}) => ({
+  focused: { space: "s1", pane: "p1", terminal: "t1", cwd: "/w/app/src" },
+  spaces: [{ id: "s1", machine: null, tabs: [{ id: "tb1" }, { id: "tb2" }] }, { id: "s2", machine: null, tabs: [{ id: "tb9" }] }],
+  panes: [{ pane: "p1", terminal: "t1", tab: "tb1" }, { pane: "p7", terminal: "t7", tab: "tb2" }],
+  terminals: [{ address: "t7", state: "live", cwd: "/w/app", labels: { "tode.vscode": "1" } }],
+  ...over,
+});
+
+test("a click shows the tode already open for the folder, or a folder above it, instead of opening another", async () => {
+  reset(opened());
+  click(make().render(), "tode-open");
+  await settle();
+  assert.deepEqual(state.ran, [{ name: "pane.focus", args: { pane: "p7" } }]);
+  assert.deepEqual(state.execs, []);
+});
+
+test("an open tode for another folder, another space or one that ended doesn't count", () => {
+  reset(opened());
+  assert.equal(findOpen("s1", "/w/other"), null);
+  assert.equal(findOpen("s2", "/w/app"), null);
+  assert.equal(findOpen("s1", "/w/application"), null);
+  assert.deepEqual(findOpen("s1", "/w/app"), { terminal: "t7", pane: "p7", folder: "/w/app" });
+  state.terminals[0].state = "finished";
+  assert.equal(findOpen("s1", "/w/app"), null);
+  state.terminals[0].state = "live";
+  state.terminals[0].labels = {};
+  assert.equal(findOpen("s1", "/w/app"), null);
+});
+
+test("an open popup is found by its space label and shown again; its old title bar keeps tode running", async () => {
+  reset(opened({ terminals: [{ address: "t8", state: "live", cwd: "/w/app", labels: { "tode.vscode": "1", "tode.space": "s1" } }] }));
+  click(make().render(), "tode-open");
+  await settle();
+  assert.equal(state.overlays.length, 1);
+  assert.equal(state.overlays[0].key, "tode-t8");
+  // The replaced window's title bar closes.
+  state.props = { titlebar: true, terminal: "t8", overlay: "w1" };
+  await make().close();
+  assert.deepEqual(state.ran, []);
+  // A later close (the person's ×) does end it.
+  await make().close();
+  assert.deepEqual(state.ran, [{ name: "terminal.kill", args: { terminal: "t8" } }]);
+});
+
+test("set to open another, a click opens a new one even when one is open", async () => {
+  reset(opened({ shared: { "tode.reuse": "new" } }));
+  assert.equal(reuse(), false);
+  click(make().render(), "tode-open");
+  await settle();
+  assert.equal(state.ran[0].name, "terminal.open");
+});
+
+test("the settings save whether to show an open tode", () => {
+  reset({ props: { settings: true, overlay: "o1" } });
+  const form = make();
+  click(form.render(), "tode-reuse-new");
+  click(form.render(), "tode-save");
+  assert.equal(state.shared["tode.reuse"], "new");
+  saveReuse("show");
+  assert.equal(state.shared["tode.reuse"], null);
+  assert.equal(reuse(), true);
+});
+
+test("the popup's title bar moves tode into a new tab or a pane, named after the button, without ending it", async () => {
+  for (const [button, place] of [["tode-to-tab", "tab"], ["tode-to-pane", "right"]]) {
+    reset({ props: { titlebar: true, terminal: "t8", folder: "/w", overlay: "w1" }, shared: { "tode.label": "Kod" } });
+    const bar = make();
+    click(bar.render(), button);
+    assert.deepEqual(state.ran[0], { name: "terminal.keep", args: { terminal: "t8", place } });
+    state.panes.push({ pane: "p8", terminal: "t8", tab: "tb8" });
+    await settle(150);
+    assert.deepEqual(state.ran.slice(1), [
+      { name: "pane.rename", args: { pane: "p8", name: "Kod" } },
+      ...(place === "tab" ? [{ name: "tab.rename", args: { id: "tb8", name: "Kod" } }] : [])]);
+    assert.deepEqual(state.closed, ["w1"]);
+    await bar.close();
+    assert.equal(state.ran.some((r) => r.name === "terminal.kill"), false);
+  }
 });

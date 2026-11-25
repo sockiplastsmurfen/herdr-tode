@@ -6,7 +6,7 @@ export const state = {
   zoom: 1, ran: [], overlays: [], closed: [], notes: [], spaces: [], hc: [], execs: [], panes: [],
   hcAnswer: { stdout: '{"address":"t9","state":"live"}', stderr: "" }, which: "/home/me/.local/bin/tode\n",
 };
-export const reset = (over = {}) => (waiting.length = 0, Object.assign(state, { shared: {}, focused: null, props: {}, ran: [], overlays: [], closed: [], notes: [], spaces: [], hc: [], execs: [], panes: [], execFails: false, zoom: 1,
+export const reset = (over = {}) => (waiting.length = 0, Object.assign(state, { shared: {}, focused: null, props: {}, ran: [], overlays: [], closed: [], notes: [], spaces: [], hc: [], execs: [], panes: [], terminals: [], execFails: false, zoom: 1,
   hcAnswer: { stdout: '{"address":"t9","state":"live"}', stderr: "" }, which: "/home/me/.local/bin/tode\n" }, over));
 
 export const theme = () => new Proxy({}, { get: (_o, k) => `#${String(k)}` });
@@ -38,3 +38,4 @@ export const hc = async (args) => { state.hc.push(args); return state.hcAnswer; 
 export const nextCommand = () => new Promise((r) => waiting.push(r));
 export const command = (name) => waiting.shift()?.(name);
 export const appHome = () => "/home/me/.config/herdr-app";
+export const terminals = () => state.terminals;

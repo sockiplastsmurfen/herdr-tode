@@ -21,22 +21,31 @@ Needs terminal-code (`curl -fsSL https://tode.sh/install | bash`); the mod is na
   other icons): a vertical bar on the right (opacity 0.8), and two bands from its top and bottom
   ends crossing to the left, the upper one (opacity 1) over the lower one (opacity 0.55). Drawn
   from scratch; not the VS Code logo file.
-- The form, a 340×264 popup: `popover` background, 16px padding; a header row with the icon
+- The form, a 340×322 popup: `popover` background, 16px padding; a header row with the icon
   (in `muted`), "tode button" (14px semibold) and "Esc" (`dim`); "Button name" (11.5px `dim`); a 34px input
   (radius 8, `background`, border `input`, `accent` while focused); the hint "Empty: VSCode.";
   "Open tode in" and a 32px segmented control (border `input`, `background`; three equal
   segments New tab / New pane / Popup window, 12px; the chosen one `selected` and `foreground`,
-  medium, the others `muted`, `hover` on hover); Cancel (`raised`/`input`) and Save
+  medium, the others `muted`, `hover` on hover); "When tode is already open for the folder" and
+  the same control with Show it / Open another; Cancel (`raised`/`input`) and Save
   (`solid`/`solid_foreground`) at the bottom right.
 - The popup window: 72% × 78% of the app, centered. A 32px title bar (`chrome`, `border` line at
   the bottom, 10px padding, 12px `muted`): the blue icon (`image`), the button's name (medium,
   `foreground`), the folder
-  with the home folder as `~` (`dim`, truncated), and a 22px × (`hover` on hover). Under it the
+  with the home folder as `~` (`dim`, truncated), then three 22px buttons (`hover` on hover,
+  14px tinted icons): `to-tab.svg` (a window with a tab bar, first tab filled; "Move to a new
+  tab"), `to-pane.svg` (a window split in two, right half filled; "Move to a pane beside the
+  focused one") and × ("Close tode"). Under it the
   terminal.
 
 ## How it behaves
 
-- Click the button: first `exec("/bin/sh", ["-c", "command -v tode"], {on: machine})` (the
+- Click the button: unless `shared("tode.reuse")` is `"new"`, first look for an open one:
+  `terminals()` with label `tode.vscode`, `state` live, on this computer, in the focused space
+  (its pane's tab's space, or label `tode.space` for a popup), whose `cwd` is the focused folder
+  or above it. Found: `pane.focus {pane}`, or for a popup `openOverlay(windowSpec(...))` again
+  (same key: it replaces the open window; mark the terminal in a module-level Map for 3 s so the
+  replaced title bar's `close()` doesn't kill it). Else `exec("/bin/sh", ["-c", "command -v tode"], {on: machine})` (the
   focused space's machine) for tode's path. Empty: open the install dialog (below) and nothing
   else. Rejected (machine unreachable): `notify` level error. Then, by `shared("tode.open")` (`"tab"` default, `"pane"`, `"window"`):
   - tab: `terminal.open {argv: [appHome() + "/mods/tode/tode-title", label], place: "tab",
@@ -44,14 +53,17 @@ Needs terminal-code (`curl -fsSL https://tode.sh/install | bash`); the mod is na
   - pane: the same with `place: "right"` and no `name`; with no focused pane
     (`focused().pane` null) as a tab.
   - Both: the pane that wasn't in `panes()` before is renamed, `pane.rename {pane, name: label}`
-    (looked for every 100 ms, up to 3 s). On another machine (the focused space's `machine`)
+    (looked for every 100 ms, up to 3 s), and labelled: `hc(["label", terminal, "tode.vscode=1"])`. On another machine (the focused space's `machine`)
     argv is just `["tode"]`: the script is on this computer.
   - `tode-title` (executable): `printf '\033]2;%s\007' "$1"; shift; exec tode "$@"`.
   - window: with that path, `hc(["run", "--json", "--bg", "--rm", "--no-parent",
-    "--on", machine?, "--cwd", cwd?, "--", "/bin/sh", "-c", WAIT, "tode", path])`, then
+    "--on", machine?, "--cwd", cwd?, "--label", "tode.vscode=1", "--label", "tode.space=<space>",
+    "--", "/bin/sh", "-c", WAIT, "tode", path, label])`, then
     `openOverlay({kind: "window", key: "tode-<address>", width: 0.72, height: 0.78, layout:
     column[block 32px {mod: "tode", props: {titlebar: true, terminal, folder}}, block {terminal}]})`.
-    × runs `terminal.kill`; the window closes when the terminal ends; the title bar's `close()`
+    × runs `terminal.kill`. Move to a tab / pane: `terminal.keep {terminal, place: "tab" |
+    "right"}`, then once `panes()` has the terminal `pane.rename` (and `tab.rename` for a tab),
+    then `closeOverlay`, with a flag so `close()` doesn't kill it; the window closes when the terminal ends; the title bar's `close()`
     kills the terminal too (app quit, layout switch). Errors: `notify` level error.
   - Without a cwd, no folder in any of them.
 - The install dialog: `openOverlay({mod: "tode", props: {missing: true, machine}, kind:
@@ -71,7 +83,7 @@ Needs terminal-code (`curl -fsSL https://tode.sh/install | bash`); the mod is na
 - In the form the current name is selected and focused. Enter or Save saves the name (trimmed)
   and the place, and closes; Esc or Cancel closes. Empty, or "VSCode", saves `null`; New tab
   saves `null`.
-- `shared("tode.label")` and `shared("tode.open")`, persisted by Herdr; the bar re-renders when
+- `shared("tode.label")`, `shared("tode.open")` and `shared("tode.reuse")` (`"new"`, else show), persisted by Herdr; the bar re-renders when
   they change.
 - Key commands through `nextCommand()` on the bar copy: `open` (as set), `open-tab`,
   `open-pane`, `open-window`.
@@ -97,7 +109,7 @@ Needs terminal-code (`curl -fsSL https://tode.sh/install | bash`); the mod is na
 - `programs.json` (Herdr's home): `"tode": {"name": "tode", "icon": "mods/tode/icon-color.svg",
   "tint": false, "match": ["tode-title", "Electron Helper"]}`, so tabs and pane headers show
   the blue icon.
-- herdr: `run`, `nextCommand`, `focused`, `panes`, `appHome`, `theme`, `shared`, `setShared`, `props`, `layout`,
+- herdr: `run`, `nextCommand`, `focused`, `panes`, `terminals`, `appHome`, `theme`, `shared`, `setShared`, `props`, `layout`,
   `settings`, `spaces`, `openOverlay`, `closeOverlay`, `notify`, `checking`, `exec`, `hc`. gpui-base: `InputState`, `Input`, `h_flex`, `v_flex`.
 
 ## Watch out
@@ -108,7 +120,7 @@ Needs terminal-code (`curl -fsSL https://tode.sh/install | bash`); the mod is na
   person's PATH).
 - tode asks the terminal whether it shows graphics (kitty) and how big it is as it starts. A
   terminal from `hc run` has nobody to answer until the window shows it, and tode quits with
-  "Unsupported terminal". So WAIT is `p="$1"; was=$(stty size); i=0; while [ $i -lt 60 ] &&
+  "Unsupported terminal". So WAIT is `p="$1"; printf '\033]2;%s\007' "$2"; was=$(stty size); i=0; while [ $i -lt 60 ] &&
   [ "$(stty size)" = "$was" ]; do sleep 0.05; i=$((i+1)); done; sleep 0.3; exec "$p"`: the
   size changes when the window attaches.
 - `terminal.open`'s `name` names a tab, not a pane: rename the new pane with `pane.rename`.
@@ -134,6 +146,8 @@ Needs terminal-code (`curl -fsSL https://tode.sh/install | bash`); the mod is na
   header, in Herdr's own `pane` header and in ones that show the title.
 - Without tode on the PATH, clicking the button opens the install dialog and nothing else;
   Install in a new tab installs terminal-code in a tab.
+- A second click for the same folder shows the first VS Code instead of opening another;
+  the popup's tab and pane buttons move it out of the window, still running.
 - Clicking the button opens `tode` in the focused terminal's folder in a new tab; set to New
   pane, in a pane to the right; set to Popup window, in a window with the title bar, and × or
   quitting tode closes it.
