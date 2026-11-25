@@ -1,3 +1,5 @@
 .DS_Store
 .env
 .env.*
+# Written by the Herdr app into installed mods
+mods/*/gpui-kit.d.ts
