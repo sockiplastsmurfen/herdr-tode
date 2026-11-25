@@ -360,3 +360,14 @@ test("the invisible popup can open the settings, or tode in a named way", async 
   assert.equal(state.ran[0].args.place, "right");
   assert.deepEqual(state.closed, ["a3"]);
 });
+
+test("when Herdr gives the popup's tode no pane, the window stays and says so; its × still ends tode", async () => {
+  reset({ props: { titlebar: true, terminal: "t8", folder: "/w", overlay: "w1" } });
+  const bar = make();
+  click(bar.render(), "tode-to-tab");
+  await settle(900);
+  assert.deepEqual(state.closed, []);
+  assert.equal(state.notes[0].level, "error");
+  await bar.close();
+  assert.deepEqual(state.ran.at(-1), { name: "terminal.kill", args: { terminal: "t8" } });
+});

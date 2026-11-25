@@ -63,7 +63,8 @@ Needs terminal-code (`curl -fsSL https://tode.sh/install | bash`); the mod is na
     column[block 32px {mod: "tode", props: {titlebar: true, terminal, folder}}, block {terminal}]})`.
     × runs `terminal.kill`. Move to a tab / pane: `terminal.keep {terminal, place: "tab" |
     "right"}`, then once `panes()` has the terminal `pane.rename` (and `tab.rename` for a tab),
-    then `closeOverlay`, with a flag so `close()` doesn't kill it; the window closes when the terminal ends; the title bar's `close()`
+    then `closeOverlay`, with a flag so `close()` doesn't kill it. No pane within 3 s (Herdr
+    refused): a `notify` error and the window stays, so × can still end tode; the window closes when the terminal ends; the title bar's `close()`
     kills the terminal too (app quit, layout switch). Errors: `notify` level error.
   - Without a cwd, no folder in any of them.
 - The install dialog: `openOverlay({mod: "tode", props: {missing: true, machine}, kind:

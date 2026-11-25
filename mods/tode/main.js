@@ -1,9 +1,8 @@
 // tode: a button that opens `tode` (terminal code) in the focused terminal's folder: in a new
 // tab (default), a new pane beside it, or a popup window; or shows the one already open there.
 // A right-click on it opens the settings (the button's name, where tode opens, and whether to
-// show an open one). Opened as an overlay (that right-click, or
-// `mod.open tode`), the same mod is that settings form; with props {titlebar} it is the
-// popup window's title bar.
+// show an open one). The same mod is also the settings form, the popup's title bar, the
+// not-installed dialog and an invisible popup other mods' buttons use: see role().
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { run, nextCommand, focused, panes, terminals, theme, shared, setShared, props, layout, settings, spaces, openOverlay, closeOverlay, notify, checking, exec, hc, appHome } from "herdr";
@@ -63,6 +62,11 @@ export function saveReuse(id) {
 export const TAG = "tode.vscode";
 export const SPACE_TAG = "tode.space";
 
+/** The machine of the space `f` is in: null for this computer. */
+function machineOf(f) {
+  return spaces().find((s) => s.id === f?.space)?.machine ?? null;
+}
+
 function inside(folder, root) {
   if (!folder || !root) return true;
   const r = root.replace(/\/+$/, "");
@@ -72,12 +76,14 @@ function inside(folder, root) {
 /** A tode this mod started, still running in that space, open on `folder` or a folder above
  *  it: {terminal, pane (null in a popup), folder}, or null. This computer's only. */
 export function findOpen(space, folder) {
-  for (const t of terminals()) {
-    if (!t.labels?.[TAG] || t.state !== "live" || String(t.address).includes("/")) continue;
-    const pane = panes().find((p) => p.terminal === t.address);
-    const where = pane ? spaces().find((s) => s.tabs?.some((x) => x.id === pane.tab))?.id : t.labels[SPACE_TAG];
-    if (where !== space || !inside(folder, t.cwd)) continue;
-    return { terminal: t.address, pane: pane?.pane ?? null, folder: t.cwd ?? null };
+  const open = terminals().filter((t) => t.labels?.[TAG] && t.state === "live" && !String(t.address).includes("/"));
+  if (!open.length) return null;
+  const paneOf = new Map(panes().map((p) => [p.terminal, p]));
+  const spaceOf = new Map(spaces().flatMap((s) => (s.tabs ?? []).map((x) => [x.id, s.id])));
+  for (const t of open) {
+    const pane = paneOf.get(t.address);
+    const where = pane ? spaceOf.get(pane.tab) : t.labels[SPACE_TAG];
+    if (where === space && inside(folder, t.cwd)) return { terminal: t.address, pane: pane?.pane ?? null, folder: t.cwd ?? null };
   }
   return null;
 }
@@ -88,8 +94,7 @@ export function findOpen(space, folder) {
 export function openArgs(how = "tab", f = focused()) {
   const place = how === "pane" && f?.pane ? "right" : "tab";
   // The script is on this computer; on another machine tode starts as it is.
-  const remote = spaces().find((s) => s.id === f?.space)?.machine;
-  const argv = remote ? COMMAND : [`${appHome()}/${TITLE_SCRIPT}`, label()];
+  const argv = machineOf(f) ? COMMAND : [`${appHome()}/${TITLE_SCRIPT}`, label()];
   const args = { argv, place };
   if (f?.cwd) args.folder = f.cwd;
   if (place === "tab") args.name = label();
@@ -116,7 +121,7 @@ export const WAIT_FOR_WINDOW = [
 /** hc's arguments for tode in a popup window: a terminal of its own, outside Herdr's tabs,
  *  removed when it exits, on the focused space's machine. */
 export function hcArgs(program, f = focused()) {
-  const machine = spaces().find((s) => s.id === f?.space)?.machine ?? null;
+  const machine = machineOf(f);
   return ["run", "--json", "--bg", "--rm", "--no-parent",
     ...(machine ? ["--on", machine] : []), ...(f?.cwd ? ["--cwd", f.cwd] : []),
     "--label", `${TAG}=1`, ...(f?.space ? ["--label", `${SPACE_TAG}=${f.space}`] : []),
@@ -145,10 +150,37 @@ const stop = (_e, cx) => cx.stop_propagation();
 // Popup windows being replaced by show(), by terminal: shared by the copies, so the replaced
 // window's title bar knows not to end tode.
 const reopening = new Map();
-const isBar = () => Boolean(props()?.titlebar);
-const isMissing = () => Boolean(props()?.missing);
-const isAction = () => Boolean(props()?.action);
-const isForm = () => !isBar() && !isMissing() && !isAction() && Boolean(props()?.settings || props()?.overlay);
+/** What this copy is, by its props: the popup's title bar, the not-installed dialog, an
+ *  invisible action popup, the settings form (any other overlay: mod.open), or the button. */
+function role() {
+  const p = props() ?? {};
+  if (p.titlebar) return "titlebar";
+  if (p.missing) return "missing";
+  if (p.action) return "action";
+  if (p.settings || p.overlay) return "form";
+  return "button";
+}
+
+/** Waits (up to 3 s) for a pane that `match` picks, then returns it, or null. */
+async function waitForPane(cx, match) {
+  for (let i = 0; i < 30; i++) {
+    const pane = panes().find(match);
+    if (pane) return pane;
+    await new Promise((r) => cx.timer.after(100, () => r()));
+  }
+  return null;
+}
+
+/** A form button, the primary one filled. */
+function formButton(t, id, text, primary, action) {
+  return h_flex().id(id).h(30).px(12).items_center().rounded(7)
+    .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
+    .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
+    .hover(s => s.opacity(0.88)).on_click(action).child(text);
+}
+
+/** Esc closes the overlay this copy is in. */
+const closeOnEscape = (overlay) => (e, cx) => { if (e.key === "escape") { closeOverlay(overlay); cx.stop_propagation(); } };
 
 // Another mod's button (a tab bar's) opens tode through this mod: an invisible popup of it with
 // props {action: "open" | "open-tab" | "open-pane" | "open-window" | "settings"} does what the
@@ -181,26 +213,28 @@ export const COMMANDS = { "open": null, "open-tab": "tab", "open-pane": "pane", 
 
 export default class Tode extends View {
   init(_props, cx) {
-    if (isForm()) this.initSettings(cx);
-    else if (isMissing()) this.handle = cx.focus_handle();
-    else if (isAction()) cx.spawn(async (cx) => {
-      const { action, overlay } = props();
-      // Closing this copy cancels its tasks: close only once the work is done.
-      if (action === "settings") this.openSettings();
-      else if (action in COMMANDS) await this.start(cx, COMMANDS[action] ?? undefined);
-      closeOverlay(overlay);
-    });
-    else if (!isBar()) cx.spawn(async (cx) => {
-      for (;;) {
-        const c = await nextCommand();
-        if (c in COMMANDS) this.open(cx, COMMANDS[c] ?? undefined);
-      }
-    });
+    switch (role()) {
+      case "form": this.initSettings(cx); break;
+      case "missing": this.handle = cx.focus_handle(); break;
+      case "action": cx.spawn(async (cx) => {
+        const { action, overlay } = props();
+        // Closing this copy cancels its tasks: close only once the work is done.
+        if (action === "settings") this.openSettings();
+        else if (action in COMMANDS) await this.start(cx, COMMANDS[action] ?? undefined);
+        closeOverlay(overlay);
+      }); break;
+      case "button": cx.spawn(async (cx) => {
+        for (;;) {
+          const c = await nextCommand();
+          if (c in COMMANDS) this.open(cx, COMMANDS[c] ?? undefined);
+        }
+      }); break;
+    }
   }
 
   // The popup window's title bar: closing tode closes the window.
   async close() {
-    const terminal = isBar() && !this.moved && props()?.terminal;
+    const terminal = role() === "titlebar" && !this.moved && props()?.terminal;
     if (!terminal || checking()) return;
     const at = reopening.get(terminal);
     if (at != null) { reopening.delete(terminal); if (Date.now() - at < 3000) return; }
@@ -238,39 +272,32 @@ export default class Tode extends View {
   /** What a click does, done when tode is shown or started. */
   async start(cx, how = mode()) {
     const f = focused();
-    const machine = spaces().find((s) => s.id === f?.space)?.machine ?? null;
+    const machine = machineOf(f);
     // Already open for this folder: show that one.
     const open = reuse() && f?.space ? findOpen(f.space, f.cwd) : null;
     if (open) { this.show(open); return; }
-    {
-      try {
-        // tode's full path, as the person's shell finds it (~/.local/bin is often only on the
-        // login shell's PATH, which exec has and herdr-core may not). Not there: how to install it.
-        const program = await findTode(machine);
-        if (!program) { openMissing(machine); return; }
-        if (how !== "window") {
-          // The new pane is named after the button too: it is the one that wasn't there before.
-          const before = new Set(panes().map((p) => p.pane));
-          const name = label();
-          run("terminal.open", openArgs(how, f));
-          for (let i = 0; i < 30; i++) {
-            const pane = panes().find((p) => !before.has(p.pane) && p.terminal);
-            if (pane) {
-              run("pane.rename", { pane: pane.pane, name });
-              if (!machine) await hc(["label", pane.terminal, `${TAG}=1`]).catch(() => null);
-              return;
-            }
-            await new Promise((r) => cx.timer.after(100, () => r()));
-          }
-          return;
-        }
+    try {
+      // tode's full path, as the person's shell finds it (~/.local/bin is often only on the
+      // login shell's PATH, which exec has and herdr-core may not). Not there: how to install it.
+      const program = await findTode(machine);
+      if (!program) { openMissing(machine); return; }
+      if (how === "window") {
         const r = await hc(hcArgs(program, f));
         const address = JSON.parse(r.stdout || "{}").address;
         if (!address) throw new Error((r.stderr || r.stdout || "no terminal").trim());
         openOverlay(windowSpec(address, f?.cwd ?? null));
-      } catch (e) {
-        notify({ title: "tode didn't start", body: String(e?.message ?? e), level: "error" });
+        return;
       }
+      // The new pane is named after the button and labelled: it is the one that wasn't there before.
+      const before = new Set(panes().map((p) => p.pane));
+      const name = label();
+      run("terminal.open", openArgs(how, f));
+      const pane = await waitForPane(cx, (p) => !before.has(p.pane) && p.terminal);
+      if (!pane) return;
+      run("pane.rename", { pane: pane.pane, name });
+      if (!machine) await hc(["label", pane.terminal, `${TAG}=1`]).catch(() => null);
+    } catch (e) {
+      notify({ title: "tode didn't start", body: String(e?.message ?? e), level: "error" });
     }
   }
 
@@ -296,8 +323,13 @@ export default class Tode extends View {
   }
 
   render() {
-    if (isAction()) return div().id("tode-action");
-    return isBar() ? this.renderTitlebar() : isMissing() ? this.renderMissing() : isForm() ? this.renderSettings() : this.renderBar();
+    switch (role()) {
+      case "titlebar": return this.renderTitlebar();
+      case "missing": return this.renderMissing();
+      case "action": return div().id("tode-action");
+      case "form": return this.renderSettings();
+      default: return this.renderBar();
+    }
   }
 
   renderBar() {
@@ -335,14 +367,9 @@ export default class Tode extends View {
   renderMissing() {
     const t = theme();
     const p = props() ?? {};
-    const btn = (id, text, primary, action) => h_flex().id(id).h(30).px(12).items_center().rounded(7)
-      .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
-      .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
-      .hover(s => s.opacity(0.88)).on_click(action).child(text);
     const para = (text) => div().pt(10).text_size(12.5).text_color(t.muted).child(text);
     const where = p.machine ? ` on ${p.machine}` : "";
-    return v_flex().id("tode-missing").track_focus(this.handle)
-      .on_key_down((e, cx) => { if (e.key === "escape") { closeOverlay(p.overlay); cx.stop_propagation(); } })
+    return v_flex().id("tode-missing").track_focus(this.handle).on_key_down(closeOnEscape(p.overlay))
       .size_full().p(18).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().gap(8)
         .child(image("mods/tode/icon-color.svg").size(18))
@@ -360,8 +387,8 @@ export default class Tode extends View {
           .on_click(() => exec("/bin/sh", ["-c", 'open "$1" 2>/dev/null || xdg-open "$1"', "sh", TERMINAL_CODE]).catch(() => null))
           .child("terminal-code on GitHub"))
         .child(div().flex_1())
-        .child(btn("tode-missing-close", "Close", false, () => closeOverlay(p.overlay)))
-        .child(btn("tode-install", "Install in a new tab", true, () => this.install())));
+        .child(formButton(t, "tode-missing-close", "Close", false, () => closeOverlay(p.overlay)))
+        .child(formButton(t, "tode-install", "Install in a new tab", true, () => this.install())));
   }
 
   /** The popup's tode moves into a new tab or a pane beside the focused one: Herdr gives the
@@ -369,20 +396,18 @@ export default class Tode extends View {
    *  window closes without ending tode. */
   move(cx, place) {
     const p = props();
-    if (this.moved) return;
-    this.moved = true;
+    if (this.moving) return;
+    this.moving = true;
     const name = label();
     run("terminal.keep", { terminal: p.terminal, place });
     cx.spawn(async (cx) => {
-      for (let i = 0; i < 30; i++) {
-        const pane = panes().find((x) => x.terminal === p.terminal);
-        if (pane) {
-          run("pane.rename", { pane: pane.pane, name });
-          if (place === "tab") run("tab.rename", { id: pane.tab, name });
-          break;
-        }
-        await new Promise((r) => cx.timer.after(100, () => r()));
-      }
+      const pane = await waitForPane(cx, (x) => x.terminal === p.terminal);
+      this.moving = false;
+      // No pane (Herdr refused): the window stays, with tode in it.
+      if (!pane) { notify({ title: "tode didn't move", body: "Herdr gave it no pane.", level: "error" }); return; }
+      run("pane.rename", { pane: pane.pane, name });
+      if (place === "tab") run("tab.rename", { id: pane.tab, name });
+      this.moved = true;
       closeOverlay(p.overlay);
     });
   }
@@ -408,10 +433,6 @@ export default class Tode extends View {
   renderSettings() {
     const t = theme();
     const p = props() ?? {};
-    const btn = (id, text, primary, action) => h_flex().id(id).h(30).px(12).items_center().rounded(7)
-      .border_1().border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised)
-      .text_color(primary ? t.solid_foreground : t.foreground).text_size(12.5).font_medium().cursor_pointer()
-      .hover(s => s.opacity(0.88)).on_click(action).child(text);
     const segmented = (key, options, chosen, pick) => h_flex().h(32).p(2).gap(2).rounded(8).border_1().border_color(t.input).bg(t.background)
       .children(options.map((m) => {
         const on = chosen === m.id;
@@ -421,8 +442,7 @@ export default class Tode extends View {
           .on_click((_e, cx) => { pick(m.id); cx.notify(); })
           .child(m.name);
       }));
-    return v_flex().id("tode-form").track_focus(this.handle)
-      .on_key_down((e, cx) => { if (e.key === "escape") { closeOverlay(p.overlay); cx.stop_propagation(); } })
+    return v_flex().id("tode-form").track_focus(this.handle).on_key_down(closeOnEscape(p.overlay))
       .size_full().p(16).bg(t.popover).text_color(t.foreground)
       .child(h_flex().items_center().gap(8)
         .child(svg("mods/tode/icon.svg").size(16).text_color(t.muted))
@@ -437,7 +457,7 @@ export default class Tode extends View {
       .child(div().pt(12).pb(6).text_size(11.5).text_color(t.dim).child("When tode is already open for the folder"))
       .child(segmented("reuse", REUSES, this.reuseChoice, (id) => { this.reuseChoice = id; }))
       .child(h_flex().pt(14).gap(8).justify_end()
-        .child(btn("tode-cancel", "Cancel", false, () => closeOverlay(p.overlay)))
-        .child(btn("tode-save", "Save", true, () => this.save())));
+        .child(formButton(t, "tode-cancel", "Cancel", false, () => closeOverlay(p.overlay)))
+        .child(formButton(t, "tode-save", "Save", true, () => this.save())));
   }
 }
