@@ -68,8 +68,30 @@ for a fixed width.
 
 Anywhere else works the same way: put the block before the tabs, in the status bar's row or in
 the sidebar. The button is drawn to match the tab bar (its background and the line under it),
-so it fits best in or next to it. It can't sit among the tab bar's own buttons (Files, Changes)
-unless your tab-bar mod draws it there: those are drawn by the tab-bar mod itself.
+so it fits best in or next to it.
+
+### Among the tab bar's buttons
+
+To have the button among the tab bar's own buttons (between Changes and a button of yours, say),
+your tab-bar mod draws it: Files and Changes are drawn by the tab-bar mod itself. Herdr's
+shipped `tabs` is read-only, so clone it first (`herdr-app do mod.clone '{"name":"tabs","as":"my-tabs"}'`)
+and point your layout's `tabs` block at the clone. In its `render`, next to Files and Changes:
+
+```js
+// VS Code for Herdr: the tode mod does the work, through an invisible popup of it.
+const tode = (action) => openOverlay({ mod: "tode", props: { action }, kind: "popup", at: "pointer", frame: "none", width: 1, height: 1 });
+const todeButton = h_flex().id("panel-tode").h(26).px(8).gap(5).flex_none().items_center().rounded(6)
+  .text_size(12).bg(t.chrome).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
+  .tooltip("Open VS Code (tode). Right-click for settings.")
+  .on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click(() => tode("open"))
+  .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); tode("settings"); })
+  .child(svg("mods/tode/icon.svg").size(14)).child(shared("tode.label") || "VSCode");
+```
+
+and add `.child(todeButton)` where it should be. `action` is `"open"` (as set), `"open-tab"`,
+`"open-pane"`, `"open-window"` or `"settings"`: the popup does what the button would, then
+closes itself. Then leave the `tode` block out of the layout. The key commands (below) need a
+shown `tode` block; without one, bind keys in your tab-bar mod instead.
 
 For the blue icon in tabs and pane headers, add the `tode` entry from
 [programs.json](programs.json) to `~/.config/herdr-app/programs.json` (merge it if you have one):
@@ -102,7 +124,8 @@ other Electron programs run straight in a terminal this icon.
 
   ![The settings](screenshots/settings.png)
 - **Keys**: bind `tode.open` (as set), `tode.open-tab`, `tode.open-pane` or `tode.open-window`
-  in `keys.json`, e.g. `"global": { "ctrl-shift-e": "tode.open" }`.
+  in `keys.json`, e.g. `"global": { "ctrl-shift-e": "tode.open" }`. Herdr delivers them to a
+  shown `tode` block, so they work when the button is the mod's own block.
 
 The button follows your theme: its icon is one color, like the tab bar's other icons. The icon
 is drawn for this mod in the style of VS Code's; it is not Microsoft's logo. This mod is not

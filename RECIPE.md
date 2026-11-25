@@ -85,6 +85,12 @@ Needs terminal-code (`curl -fsSL https://tode.sh/install | bash`); the mod is na
   saves `null`.
 - `shared("tode.label")`, `shared("tode.open")` and `shared("tode.reuse")` (`"new"`, else show), persisted by Herdr; the bar re-renders when
   they change.
+- Other mods' buttons (a tab bar's) open tode through it: `openOverlay({mod: "tode", props:
+  {action}, kind: "popup", at: "pointer", frame: "none", width: 1, height: 1})`; that copy
+  draws an empty div, does what the button would (`action`: open, open-tab, open-pane,
+  open-window, or settings), awaits it, then `closeOverlay` (closing a copy cancels its tasks,
+  so not before). Mod commands reach only shown copies, and with the button in a tab bar no
+  `tode` block need be shown.
 - Key commands through `nextCommand()` on the bar copy: `open` (as set), `open-tab`,
   `open-pane`, `open-window`.
 - Presses on the buttons stop propagation, so the block can be `window_drag` elsewhere.

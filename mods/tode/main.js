@@ -147,7 +147,17 @@ const stop = (_e, cx) => cx.stop_propagation();
 const reopening = new Map();
 const isBar = () => Boolean(props()?.titlebar);
 const isMissing = () => Boolean(props()?.missing);
-const isForm = () => !isBar() && !isMissing() && Boolean(props()?.settings || props()?.overlay);
+const isAction = () => Boolean(props()?.action);
+const isForm = () => !isBar() && !isMissing() && !isAction() && Boolean(props()?.settings || props()?.overlay);
+
+// Another mod's button (a tab bar's) opens tode through this mod: an invisible popup of it with
+// props {action: "open" | "open-tab" | "open-pane" | "open-window" | "settings"} does what the
+// button here would and closes itself. Herdr's mod commands reach only shown copies, and this
+// mod may have none.
+export const ACTION = { kind: "popup", at: "pointer", frame: "none", width: 1, height: 1 };
+export function actionOverlay(action = "open") {
+  return { mod: "tode", props: { action }, ...ACTION };
+}
 
 // tode comes from terminal-code (VS Code in the terminal), installed with its own script.
 export const TERMINAL_CODE = "https://github.com/zenbu-labs/terminal-code";
@@ -173,6 +183,13 @@ export default class Tode extends View {
   init(_props, cx) {
     if (isForm()) this.initSettings(cx);
     else if (isMissing()) this.handle = cx.focus_handle();
+    else if (isAction()) cx.spawn(async (cx) => {
+      const { action, overlay } = props();
+      // Closing this copy cancels its tasks: close only once the work is done.
+      if (action === "settings") this.openSettings();
+      else if (action in COMMANDS) await this.start(cx, COMMANDS[action] ?? undefined);
+      closeOverlay(overlay);
+    });
     else if (!isBar()) cx.spawn(async (cx) => {
       for (;;) {
         const c = await nextCommand();
@@ -215,12 +232,17 @@ export default class Tode extends View {
   }
 
   open(cx, how = mode()) {
+    cx.spawn((cx) => this.start(cx, how));
+  }
+
+  /** What a click does, done when tode is shown or started. */
+  async start(cx, how = mode()) {
     const f = focused();
     const machine = spaces().find((s) => s.id === f?.space)?.machine ?? null;
     // Already open for this folder: show that one.
     const open = reuse() && f?.space ? findOpen(f.space, f.cwd) : null;
     if (open) { this.show(open); return; }
-    cx.spawn(async (cx) => {
+    {
       try {
         // tode's full path, as the person's shell finds it (~/.local/bin is often only on the
         // login shell's PATH, which exec has and herdr-core may not). Not there: how to install it.
@@ -249,7 +271,7 @@ export default class Tode extends View {
       } catch (e) {
         notify({ title: "tode didn't start", body: String(e?.message ?? e), level: "error" });
       }
-    });
+    }
   }
 
   /** Shows an open tode: its pane (and so its tab), or its popup window again. Opening the
@@ -274,6 +296,7 @@ export default class Tode extends View {
   }
 
   render() {
+    if (isAction()) return div().id("tode-action");
     return isBar() ? this.renderTitlebar() : isMissing() ? this.renderMissing() : isForm() ? this.renderSettings() : this.renderBar();
   }
 

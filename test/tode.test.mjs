@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { state, reset, command } from "./fake/herdr.mjs";
 import { make, find, texts, click, cx, settle } from "./lib.mjs";
-import { label, saveLabel, openArgs, mode, saveMode, WAIT_FOR_WINDOW, reuse, saveReuse, findOpen } from "../mods/tode/main.js";
+import { label, saveLabel, openArgs, mode, saveMode, WAIT_FOR_WINDOW, reuse, saveReuse, findOpen, actionOverlay } from "../mods/tode/main.js";
 
 test("the button says VSCode by default", () => {
   reset();
@@ -331,4 +331,32 @@ test("the popup's title bar moves tode into a new tab or a pane, named after the
     await bar.close();
     assert.equal(state.ran.some((r) => r.name === "terminal.kill"), false);
   }
+});
+
+test("another mod's button opens tode through an invisible popup, which closes itself when done", async () => {
+  const spec = actionOverlay();
+  assert.deepEqual(spec, { mod: "tode", props: { action: "open" }, kind: "popup", at: "pointer", frame: "none", width: 1, height: 1 });
+  reset({ props: { action: "open", overlay: "a1" }, focused: { space: "s1", pane: "p1", terminal: "t1", cwd: "/w" },
+    spaces: [{ id: "s1", machine: null, tabs: [{ id: "tb1" }] }], panes: [{ pane: "p1", terminal: "t1", tab: "tb1" }] });
+  const view = make();
+  assert.equal(find(view.render(), "tode-form"), null);
+  await settle(80);
+  assert.equal(state.ran[0].name, "terminal.open");
+  assert.deepEqual(state.ran[1], { name: "pane.rename", args: { pane: "p101", name: "VSCode" } });
+  assert.deepEqual(state.closed, ["a1"]);
+});
+
+test("the invisible popup can open the settings, or tode in a named way", async () => {
+  reset({ props: { action: "settings", overlay: "a2" } });
+  make();
+  await settle();
+  assert.deepEqual(state.overlays[0].props, { settings: true });
+  assert.deepEqual(state.closed, ["a2"]);
+
+  reset({ props: { action: "open-pane", overlay: "a3" }, focused: { space: "s1", pane: "p1", terminal: "t1", cwd: "/w" },
+    spaces: [{ id: "s1", machine: null, tabs: [] }] });
+  make();
+  await settle(80);
+  assert.equal(state.ran[0].args.place, "right");
+  assert.deepEqual(state.closed, ["a3"]);
 });
