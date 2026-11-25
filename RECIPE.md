@@ -1,11 +1,14 @@
-# tode
+# VS Code for Herdr
 
-A button at the right end of the tab bar that opens `tode` (terminal code) in the focused
+A button at the right end of the tab bar that opens VS Code in the terminal:
+[terminal-code](https://github.com/zenbu-labs/terminal-code)'s `tode`, in the focused
 terminal's folder: in a new tab (default), a new pane beside it, or a popup window. It says
 **VSCode** with a small VS Code-style icon in the tab bar's icon color; a right-click on it opens
 its settings: the name and where tode opens.
 
-![tode](preview.png)
+![VS Code for Herdr](preview.png)
+
+Needs terminal-code (`curl -fsSL https://tode.sh/install | bash`); the mod is named `tode`.
 
 ## What you see
 
